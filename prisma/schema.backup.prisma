@@ -1,0 +1,306 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  GERANT
+  CHEF_PISTE
+  CAISSIER
+}
+
+enum FuelType {
+  SUPER
+  GAZOIL
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CHECK
+  CASH
+}
+
+enum ExpenseCategory {
+  EDG
+  GROUPE_ELECTROGENE
+  TELEPHONE_INTERNET
+  TRANSPORT
+  ENTRETIEN_REPARATIONS
+  FOURNITURES
+  DIVERS
+}
+
+enum DocType {
+  PAYMENT_RECEIPT
+  FUEL_VOUCHER
+  CASH_OUT_CERTIFICATE
+  INVOICE
+  PAYSLIP
+}
+
+model Station {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  city      String
+  createdAt DateTime @default(now())
+
+  users        User[]
+  tanks        Tank[]
+  pumps        Pump[]
+  products     Product[]
+  subscribers  Subscriber[]
+  payments     Payment[]
+  expenses     Expense[]
+  employees    Employee[]
+  documents    CertifiedDocument[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  stationId    String?  
+  station      Station? @relation(fields: [stationId], references: [id])
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  createdAt    DateTime @default(now())
+
+  recordedPayments Payment[]
+  recordedExpenses Expense[]
+}
+
+model Tank {
+  id           String   @id @default(uuid())
+  stationId    String
+  station      Station  @relation(fields: [stationId], references: [id])
+  code         String
+  fuelType     FuelType
+  capacity     Float
+  initialStock Float    @default(0)
+  currentStock Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  pumps      Pump[]
+  deliveries TankDelivery[]
+  dipsticks  TankDipstick[]
+}
+
+model TankDelivery {
+  id             String   @id @default(uuid())
+  tankId         String
+  tank           Tank     @relation(fields: [tankId], references: [id])
+  deliveryDate   DateTime @default(now())
+  litersReceived Float
+  supplierBl     String?
+  costPrice      Float?
+}
+
+model TankDipstick {
+  id                String   @id @default(uuid())
+  tankId            String
+  tank              Tank     @relation(fields: [tankId], references: [id])
+  readingDate       DateTime @default(now())
+  theoreticalLiters Float
+  physicalLiters    Float
+  gapLiters         Float    // Loss / Variance (physical - theoretical)
+  operatorId        String
+}
+
+model Pump {
+  id        String   @id @default(uuid())
+  stationId String
+  station   Station  @relation(fields: [stationId], references: [id])
+  tankId    String
+  tank      Tank     @relation(fields: [tankId], references: [id])
+  name      String
+  fuelType  FuelType
+
+  readings PumpReading[]
+}
+
+model PumpReading {
+  id           String   @id @default(uuid())
+  pumpId       String
+  pump         Pump     @relation(fields: [pumpId], references: [id])
+  pompisteId   String?
+  startIndex   Float
+  endIndex     Float
+  returnToTank Float    @default(0)
+  unitPrice    Float
+  totalLiters  Float
+  totalAmount  Float
+  timestamp    DateTime @default(now())
+}
+
+model Product {
+  id           String   @id @default(uuid())
+  stationId    String
+  station      Station  @relation(fields: [stationId], references: [id])
+  code         String
+  name         String
+  unitType     String   // BIDON, FUT, UNITE
+  currentStock Int      @default(0)
+  price        Float
+  createdAt    DateTime @default(now())
+
+  movements StockMovement[]
+}
+
+model StockMovement {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  type        String   // IN_PURCHASE, OUT_SALE, OUT_LOSS, OUT_EXPIRED
+  quantity    Int
+  unitPrice   Float
+  date        DateTime @default(now())
+  notes       String?
+}
+
+model Subscriber {
+  id             String   @id @default(uuid())
+  stationId      String
+  station        Station  @relation(fields: [stationId], references: [id])
+  code           String
+  name           String
+  phone          String?
+  address        String?
+  currentAdvance Float    @default(0) // Avance / Acompte
+  currentCredit  Float    @default(0) // Cumul crédit restant à payer
+  createdAt      DateTime @default(now())
+
+  vouchers SubscriberVoucher[]
+  payments Payment[]
+  invoices Invoice[]
+}
+
+model SubscriberVoucher {
+  id           String     @id @default(uuid())
+  subscriberId String
+  subscriber   Subscriber @relation(fields: [subscriberId], references: [id])
+  vehiclePlate String?
+  fuelType     FuelType
+  liters       Float
+  unitPrice    Float
+  totalAmount  Float
+  timestamp    DateTime   @default(now())
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  stationId     String
+  station       Station       @relation(fields: [stationId], references: [id])
+  subscriberId  String?
+  subscriber    Subscriber?   @relation(fields: [subscriberId], references: [id])
+  payerName     String        // Nom du déposant / payeur (MANDATORY)
+  accountNumber String        // N° de compte bancaire ou Mobile Money (MANDATORY)
+  paymentMethod PaymentMethod
+  referenceNo   String?
+  amount        Float
+  notes         String?
+  recordedById  String
+  recordedBy    User          @relation(fields: [recordedById], references: [id])
+  timestamp     DateTime      @default(now())
+}
+
+model Invoice {
+  id              String     @id @default(uuid())
+  invoiceNumber   String     @unique
+  subscriberId    String
+  subscriber      Subscriber @relation(fields: [subscriberId], references: [id])
+  periodStart     DateTime
+  periodEnd       DateTime
+  totalAmount     Float
+  advanceDeducted Float      @default(0)
+  remainingToPay  Float
+  status          String     // DRAFT, ISSUED, PAID
+  createdAt       DateTime   @default(now())
+}
+
+model Expense {
+  id               String          @id @default(uuid())
+  stationId        String
+  station          Station         @relation(fields: [stationId], references: [id])
+  category         ExpenseCategory
+  amount           Float
+  beneficiary      String
+  justificationUrl String?
+  notes            String?
+  recordedById     String
+  recordedBy       User            @relation(fields: [recordedById], references: [id])
+  timestamp        DateTime        @default(now())
+}
+
+model Employee {
+  id                String   @id @default(uuid())
+  stationId         String
+  station           Station  @relation(fields: [stationId], references: [id])
+  fullName          String
+  jobTitle          String   // POMPISTE, GARDIEN, CHEF_PISTE, GERANT...
+  baseSalary        Float
+  transportAllowance Float   @default(0)
+  livingAllowance   Float    @default(0)
+  housingAllowance  Float    @default(0)
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+
+  shortages      EmployeeShortage[]
+  loans          EmployeeLoan[]
+  payrollSlips   PayrollSlip[]
+}
+
+model EmployeeShortage {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  date        DateTime @default(now())
+  amount      Float
+  reason      String?
+  monthPeriod String   // ex: "2026-01"
+  isResolved  Boolean  @default(false)
+}
+
+model EmployeeLoan {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  date       DateTime @default(now())
+  amount     Float
+  reason     String?
+}
+
+model PayrollSlip {
+  id               String   @id @default(uuid())
+  employeeId       String
+  employee         Employee @relation(fields: [employeeId], references: [id])
+  monthPeriod      String   // ex: "2026-01"
+  baseSalary       Float
+  totalAllowances  Float
+  grossSalary      Float
+  previousLoans    Float    @default(0)
+  monthLoans       Float    @default(0)
+  shortagesDeducted Float   @default(0)
+  reimbursements   Float    @default(0)
+  netPayable       Float
+  generatedAt      DateTime @default(now())
+}
+
+model CertifiedDocument {
+  id          String   @id @default(uuid())
+  docNumber   String   @unique
+  stationId   String
+  station     Station  @relation(fields: [stationId], references: [id])
+  docType     DocType
+  timestamp   DateTime @default(now())
+  operatorName String
+  contentJson String   // JSON string of all transaction details
+  qrHash      String
+}

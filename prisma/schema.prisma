@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Station {
+  id          String              @id @default(dbgenerated("(gen_random_uuid())::text"))
+  code        String              @unique
+  name        String
+  city        String
+  createdAt   DateTime            @default(now())
+  documents   CertifiedDocument[]
+  employees   Employee[]
+  expenses    Expense[]
+  payments    Payment[]
+  products    Product[]
+  pumps       Pump[]
+  subscribers Subscriber[]
+  tanks       Tank[]
+  users       User[]
+}
+
+model User {
+  id               String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId        String?
+  username         String    @unique
+  passwordHash     String
+  fullName         String
+  role             Role
+  createdAt        DateTime  @default(now())
+  recordedExpenses Expense[]
+  recordedPayments Payment[]
+  station          Station?  @relation(fields: [stationId], references: [id], onUpdate: NoAction)
+}
+
+model Tank {
+  id           String         @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId    String
+  code         String
+  fuelType     FuelType
+  capacity     Float
+  initialStock Float          @default(0)
+  currentStock Float          @default(0)
+  createdAt    DateTime       @default(now())
+  pumps        Pump[]
+  station      Station        @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  deliveries   TankDelivery[]
+  dipsticks    TankDipstick[]
+}
+
+model TankDelivery {
+  id             String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  tankId         String
+  deliveryDate   DateTime @default(now())
+  litersReceived Float
+  supplierBl     String?
+  costPrice      Float?
+  tank           Tank     @relation(fields: [tankId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model TankDipstick {
+  id                String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  tankId            String
+  readingDate       DateTime @default(now())
+  theoreticalLiters Float
+  physicalLiters    Float
+  gapLiters         Float
+  operatorId        String
+  tank              Tank     @relation(fields: [tankId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Pump {
+  id        String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId String
+  tankId    String
+  name      String
+  fuelType  FuelType
+  station   Station       @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tank      Tank          @relation(fields: [tankId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  readings  PumpReading[]
+}
+
+model PumpReading {
+  id           String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  pumpId       String
+  pompisteId   String?
+  startIndex   Float
+  endIndex     Float
+  returnToTank Float    @default(0)
+  unitPrice    Float
+  totalLiters  Float
+  totalAmount  Float
+  timestamp    DateTime @default(now())
+  pump         Pump     @relation(fields: [pumpId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Product {
+  id           String          @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId    String
+  code         String
+  name         String
+  unitType     String
+  currentStock Int             @default(0)
+  price        Float           @default(0)
+  createdAt    DateTime        @default(now())
+  station      Station         @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  movements    StockMovement[]
+}
+
+model StockMovement {
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  productId String
+  type      String
+  quantity  Int
+  unitPrice Float
+  date      DateTime @default(now())
+  notes     String?
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Subscriber {
+  id             String              @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId      String
+  code           String
+  name           String
+  phone          String?
+  address        String?
+  currentAdvance Float               @default(0)
+  currentCredit  Float               @default(0)
+  createdAt      DateTime            @default(now())
+  invoices       Invoice[]
+  payments       Payment[]
+  station        Station             @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vouchers       SubscriberVoucher[]
+}
+
+model SubscriberVoucher {
+  id           String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  subscriberId String
+  vehiclePlate String?
+  fuelType     FuelType
+  liters       Float
+  unitPrice    Float
+  totalAmount  Float
+  timestamp    DateTime   @default(now())
+  subscriber   Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Payment {
+  id            String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId     String
+  subscriberId  String?
+  payerName     String
+  accountNumber String
+  paymentMethod PaymentMethod
+  referenceNo   String?
+  amount        Float
+  notes         String?
+  recordedById  String
+  timestamp     DateTime      @default(now())
+  recordedBy    User          @relation(fields: [recordedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  station       Station       @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subscriber    Subscriber?   @relation(fields: [subscriberId], references: [id], onUpdate: NoAction)
+}
+
+model Invoice {
+  id              String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  invoiceNumber   String     @unique
+  subscriberId    String
+  periodStart     DateTime
+  periodEnd       DateTime
+  totalAmount     Float
+  advanceDeducted Float      @default(0)
+  remainingToPay  Float
+  status          String
+  createdAt       DateTime   @default(now())
+  subscriber      Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Expense {
+  id               String          @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId        String
+  category         ExpenseCategory
+  amount           Float
+  beneficiary      String
+  justificationUrl String?
+  notes            String?
+  recordedById     String
+  timestamp        DateTime        @default(now())
+  recordedBy       User            @relation(fields: [recordedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  station          Station         @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Employee {
+  id                 String             @id @default(dbgenerated("(gen_random_uuid())::text"))
+  stationId          String
+  fullName           String
+  jobTitle           String
+  baseSalary         Float              @default(0)
+  transportAllowance Float              @default(0)
+  livingAllowance    Float              @default(0)
+  housingAllowance   Float              @default(0)
+  status             String             @default("ACTIVE")
+  createdAt          DateTime           @default(now())
+  station            Station            @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  loans              EmployeeLoan[]
+  shortages          EmployeeShortage[]
+  payrollSlips       PayrollSlip[]
+}
+
+model EmployeeShortage {
+  id          String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  employeeId  String
+  date        DateTime @default(now())
+  amount      Float
+  reason      String?
+  monthPeriod String
+  isResolved  Boolean  @default(false)
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model EmployeeLoan {
+  id         String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  employeeId String
+  date       DateTime @default(now())
+  amount     Float
+  reason     String?
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model PayrollSlip {
+  id                String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  employeeId        String
+  monthPeriod       String
+  baseSalary        Float
+  totalAllowances   Float
+  grossSalary       Float
+  previousLoans     Float    @default(0)
+  monthLoans        Float    @default(0)
+  shortagesDeducted Float    @default(0)
+  reimbursements    Float    @default(0)
+  netPayable        Float
+  generatedAt       DateTime @default(now())
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model CertifiedDocument {
+  id           String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  docNumber    String   @unique
+  stationId    String
+  docType      DocType
+  timestamp    DateTime @default(now())
+  operatorName String
+  contentJson  String
+  qrHash       String
+  station      Station  @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+enum Role {
+  SUPER_ADMIN
+  GERANT
+  CHEF_PISTE
+  CAISSIER
+}
+
+enum FuelType {
+  SUPER
+  GAZOIL
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CHECK
+  CASH
+}
+
+enum ExpenseCategory {
+  EDG
+  GROUPE_ELECTROGENE
+  TELEPHONE_INTERNET
+  TRANSPORT
+  ENTRETIEN_REPARATIONS
+  FOURNITURES
+  DIVERS
+}
+
+enum DocType {
+  PAYMENT_RECEIPT
+  FUEL_VOUCHER
+  CASH_OUT_CERTIFICATE
+  INVOICE
+  PAYSLIP
+}

@@ -1,0 +1,972 @@
+"use client";
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  StationMock, 
+  TankMock, 
+  PumpMock, 
+  SubscriberMock, 
+  ProductMock, 
+  PaymentMock, 
+  ExpenseMock, 
+  EmployeeMock, 
+  FuelDeliveryMock, 
+  FuelPumpShiftMock, 
+  INITIAL_STATIONS, 
+  INITIAL_TANKS, 
+  INITIAL_PUMPS, 
+  INITIAL_SUBSCRIBERS, 
+  INITIAL_PRODUCTS, 
+  INITIAL_PAYMENTS, 
+  INITIAL_EXPENSES, 
+  INITIAL_EMPLOYEES, 
+  INITIAL_DELIVERIES, 
+  INITIAL_PUMP_SHIFTS,
+  UserAccountMock,
+  INITIAL_USERS
+} from '@/lib/data-mock';
+import { ReceiptData } from '@/components/ReceiptModal';
+
+export type UserRole = 'SUPER_ADMIN' | 'GERANT' | 'CHEF_PISTE' | 'CAISSIER';
+
+interface StationContextType {
+  // Authentication & Session
+  currentUser: UserAccountMock | null;
+  login: (email: string, password?: string) => boolean;
+  logout: () => void;
+  switchUserDemo: (user: UserAccountMock) => void;
+  allUsers: UserAccountMock[];
+
+  // Navigation & Role
+  stations: StationMock[];
+  currentStation: StationMock | null;
+  setCurrentStation: (station: StationMock | null) => void;
+  userRole: UserRole;
+  setUserRole: (role: UserRole) => void;
+
+  // Station Management
+  addStation: (data: { code: string; name: string; city: string }) => StationMock;
+
+  // Data Collections
+  tanks: TankMock[];
+  pumps: PumpMock[];
+  subscribers: SubscriberMock[];
+  products: ProductMock[];
+  payments: PaymentMock[];
+  expenses: ExpenseMock[];
+  employees: EmployeeMock[];
+  deliveries: FuelDeliveryMock[];
+  pumpShifts: FuelPumpShiftMock[];
+
+  // Business Actions
+  recordPumpShift: (data: {
+    pumpId: string;
+    startIndex: number;
+    endIndex: number;
+    returnToTank: number;
+    pompisteName: string;
+    shiftType: 'MATIN' | 'SOIR' | 'NUIT';
+  }) => { receipt: ReceiptData; shift: FuelPumpShiftMock };
+
+  recordTankDipstick: (data: {
+    tankId: string;
+    physicalStock: number;
+    operatorName: string;
+  }) => { receipt: ReceiptData; tank: TankMock; gap: number };
+
+  recordFuelDelivery: (data: {
+    tankId: string;
+    deliveryNoteNumber: string;
+    truckPlate: string;
+    driverName: string;
+    supplier: string;
+    litersDelivered: number;
+    operatorName: string;
+  }) => { receipt: ReceiptData; delivery: FuelDeliveryMock };
+
+  addSubscriber: (data: {
+    code: string;
+    name: string;
+    phone: string;
+    address: string;
+    initialAdvance?: number;
+    initialCredit?: number;
+  }) => SubscriberMock;
+
+  recordSubscriberPayment: (data: {
+    subscriberId: string;
+    payerName: string;
+    accountNumber: string;
+    paymentMethod: 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHECK' | 'CASH';
+    referenceNo: string;
+    amount: number;
+    notes: string;
+  }) => { receipt: ReceiptData; payment: PaymentMock };
+
+  recordSubscriberVoucher: (data: {
+    subscriberId: string;
+    fuelType: 'SUPER' | 'GAZOIL';
+    liters: number;
+    unitPrice: number;
+    vehiclePlate: string;
+    driverName: string;
+    voucherNo: string;
+  }) => { receipt: ReceiptData; totalAmount: number };
+
+  addProduct: (data: {
+    code: string;
+    name: string;
+    unitType: string;
+    price: number;
+    stock: number;
+  }) => ProductMock;
+
+  recordProductSale: (data: {
+    productId: string;
+    quantity: number;
+    clientName: string;
+  }) => { receipt: ReceiptData; total: number };
+
+  restockProduct: (productId: string, quantity: number) => void;
+
+  addExpense: (data: {
+    category: 'EDG' | 'GROUPE_ELECTROGENE' | 'TELEPHONE_INTERNET' | 'TRANSPORT' | 'ENTRETIEN_REPARATIONS' | 'FOURNITURES' | 'DIVERS';
+    amount: number;
+    beneficiary: string;
+    notes: string;
+  }) => { receipt: ReceiptData; expense: ExpenseMock };
+
+  recordBankDeposit: (data: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    depositorName: string;
+    slipNumber: string;
+    notes: string;
+  }) => { receipt: ReceiptData; expense: ExpenseMock };
+
+  addEmployee: (data: {
+    fullName: string;
+    jobTitle: string;
+    baseSalary: number;
+    transportAllowance: number;
+    livingAllowance: number;
+    housingAllowance: number;
+  }) => EmployeeMock;
+
+  updateEmployee: (
+    empId: string, 
+    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
+  ) => void;
+
+  generateEmployeePayslip: (empId: string) => ReceiptData | null;
+
+  resetAllData: () => void;
+}
+
+const StationContext = createContext<StationContextType | undefined>(undefined);
+
+const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V3';
+
+export function StationProvider({ children }: { children: React.ReactNode }) {
+  const [isClient, setIsClient] = useState(false);
+
+  // States
+  const [currentUser, setCurrentUser] = useState<UserAccountMock | null>(null);
+  const [stations, setStations] = useState<StationMock[]>(INITIAL_STATIONS);
+  const [currentStation, setCurrentStation] = useState<StationMock | null>(INITIAL_STATIONS[0]);
+  const [userRole, setUserRole] = useState<UserRole>('SUPER_ADMIN');
+
+  const [tanks, setTanks] = useState<TankMock[]>(INITIAL_TANKS);
+  const [pumps, setPumps] = useState<PumpMock[]>(INITIAL_PUMPS);
+  const [subscribers, setSubscribers] = useState<SubscriberMock[]>(INITIAL_SUBSCRIBERS);
+  const [products, setProducts] = useState<ProductMock[]>(INITIAL_PRODUCTS);
+  const [payments, setPayments] = useState<PaymentMock[]>(INITIAL_PAYMENTS);
+  const [expenses, setExpenses] = useState<ExpenseMock[]>(INITIAL_EXPENSES);
+  const [employees, setEmployees] = useState<EmployeeMock[]>(INITIAL_EMPLOYEES);
+  const [deliveries, setDeliveries] = useState<FuelDeliveryMock[]>(INITIAL_DELIVERIES);
+  const [pumpShifts, setPumpShifts] = useState<FuelPumpShiftMock[]>(INITIAL_PUMP_SHIFTS);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.currentUser !== undefined) setCurrentUser(parsed.currentUser);
+        if (parsed.stations) setStations(parsed.stations);
+        if (parsed.currentStation !== undefined) setCurrentStation(parsed.currentStation);
+        if (parsed.userRole) setUserRole(parsed.userRole);
+        if (parsed.tanks) setTanks(parsed.tanks);
+        if (parsed.pumps) setPumps(parsed.pumps);
+        if (parsed.subscribers) setSubscribers(parsed.subscribers);
+        if (parsed.products) setProducts(parsed.products);
+        if (parsed.payments) setPayments(parsed.payments);
+        if (parsed.expenses) setExpenses(parsed.expenses);
+        if (parsed.employees) setEmployees(parsed.employees);
+        if (parsed.deliveries) setDeliveries(parsed.deliveries);
+        if (parsed.pumpShifts) setPumpShifts(parsed.pumpShifts);
+      }
+    } catch (e) {
+      console.warn('Failed to load local storage state:', e);
+    }
+  }, []);
+
+  // Sync to localStorage on change
+  useEffect(() => {
+    if (!isClient) return;
+    try {
+      const payload = {
+        currentUser,
+        stations,
+        currentStation,
+        userRole,
+        tanks,
+        pumps,
+        subscribers,
+        products,
+        payments,
+        expenses,
+        employees,
+        deliveries,
+        pumpShifts
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('Failed to persist to localStorage:', e);
+    }
+  }, [
+    isClient,
+    currentUser,
+    stations,
+    currentStation,
+    userRole,
+    tanks,
+    pumps,
+    subscribers,
+    products,
+    payments,
+    expenses,
+    employees,
+    deliveries,
+    pumpShifts
+  ]);
+
+  // Auth Methods
+  const login = (email: string, password?: string) => {
+    const user = INITIAL_USERS.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (user) {
+      setCurrentUser(user);
+      setUserRole(user.role);
+      if (user.role === 'SUPER_ADMIN') {
+        setCurrentStation(null);
+      } else {
+        const targetStation = stations.find(s => s.id === user.stationId) || stations[0];
+        setCurrentStation(targetStation);
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+  };
+
+  const switchUserDemo = (user: UserAccountMock) => {
+    setCurrentUser(user);
+    setUserRole(user.role);
+    if (user.role === 'SUPER_ADMIN') {
+      setCurrentStation(null);
+    } else {
+      const targetStation = stations.find(s => s.id === user.stationId) || stations[0];
+      setCurrentStation(targetStation);
+    }
+  };
+
+
+  const activeStationId = currentStation ? currentStation.id : 'st-kissosso';
+  const activeStationName = currentStation ? currentStation.name : 'TotalEnergies Kissosso';
+
+  // Helper: Add Station
+  const addStation = (data: { code: string; name: string; city: string }) => {
+    const newSt: StationMock = {
+      id: `st-${Date.now()}`,
+      code: data.code.toUpperCase(),
+      name: data.name,
+      city: data.city
+    };
+    // Initialize default tanks and pumps for this new station
+    const newSuperTank: TankMock = {
+      id: `tk-super-${newSt.id}`,
+      stationId: newSt.id,
+      code: 'CUVE 01 - SUPER',
+      fuelType: 'SUPER',
+      capacity: 45000,
+      initialStock: 10000,
+      currentStock: 10000,
+      physicalStock: 10000,
+      lastDipstickDate: new Date().toISOString().substring(0, 16)
+    };
+    const newGazoilTank: TankMock = {
+      id: `tk-gazoil-${newSt.id}`,
+      stationId: newSt.id,
+      code: 'CUVE 02 - GAZOIL',
+      fuelType: 'GAZOIL',
+      capacity: 45000,
+      initialStock: 12000,
+      currentStock: 12000,
+      physicalStock: 12000,
+      lastDipstickDate: new Date().toISOString().substring(0, 16)
+    };
+
+    const newPump1: PumpMock = {
+      id: `p-${newSt.id}-1`,
+      stationId: newSt.id,
+      tankId: newSuperTank.id,
+      name: 'Pompe 01 (Super)',
+      fuelType: 'SUPER',
+      startIndex: 0,
+      endIndex: 0,
+      returnToTank: 0,
+      unitPrice: 12000
+    };
+    const newPump2: PumpMock = {
+      id: `p-${newSt.id}-2`,
+      stationId: newSt.id,
+      tankId: newGazoilTank.id,
+      name: 'Pompe 02 (Gazoil)',
+      fuelType: 'GAZOIL',
+      startIndex: 0,
+      endIndex: 0,
+      returnToTank: 0,
+      unitPrice: 12000
+    };
+
+    setStations(prev => [...prev, newSt]);
+    setTanks(prev => [...prev, newSuperTank, newGazoilTank]);
+    setPumps(prev => [...prev, newPump1, newPump2]);
+    return newSt;
+  };
+
+  // Helper: Record Pump Shift
+  const recordPumpShift = (data: {
+    pumpId: string;
+    startIndex: number;
+    endIndex: number;
+    returnToTank: number;
+    pompisteName: string;
+    shiftType: 'MATIN' | 'SOIR' | 'NUIT';
+  }) => {
+    const pump = pumps.find(p => p.id === data.pumpId);
+    if (!pump) throw new Error('Pompe non trouvée');
+
+    const litersSold = Math.max(0, data.endIndex - data.startIndex - data.returnToTank);
+    const totalAmount = litersSold * pump.unitPrice;
+
+    // Update pump indices
+    setPumps(prev => prev.map(p => 
+      p.id === data.pumpId 
+        ? { ...p, startIndex: data.startIndex, endIndex: data.endIndex, returnToTank: data.returnToTank }
+        : p
+    ));
+
+    // Deduct liters from corresponding tank
+    setTanks(prev => prev.map(t => 
+      t.id === pump.tankId 
+        ? { ...t, currentStock: Math.max(0, t.currentStock - litersSold) }
+        : t
+    ));
+
+    const shift: FuelPumpShiftMock = {
+      id: `shift-${Date.now()}`,
+      stationId: pump.stationId,
+      pumpId: pump.id,
+      pumpName: pump.name,
+      fuelType: pump.fuelType,
+      startIndex: data.startIndex,
+      endIndex: data.endIndex,
+      returnToTank: data.returnToTank,
+      litersSold,
+      unitPrice: pump.unitPrice,
+      totalAmount,
+      pompisteName: data.pompisteName,
+      shiftType: data.shiftType,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    setPumpShifts(prev => [shift, ...prev]);
+
+    const docNo = `REC-POMPE-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'BON DE SAISIE DE FEUILLE DE TOUR POMPE (CERTIFIÉ)',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: data.pompisteName,
+      fields: [
+        { label: 'Pompe Saisie', value: `${pump.name} (${pump.fuelType})` },
+        { label: 'Quart / Tournée', value: data.shiftType },
+        { label: 'Index Départ', value: data.startIndex.toLocaleString('fr-FR') },
+        { label: 'Index Arrivée', value: data.endIndex.toLocaleString('fr-FR') },
+        { label: 'Retour en Cuve', value: `${data.returnToTank.toLocaleString('fr-FR')} Litres` },
+        { label: 'Quantité Nette Vendue', value: `${litersSold.toLocaleString('fr-FR')} Litres` },
+        { label: 'Prix Unitaire', value: `${pump.unitPrice.toLocaleString('fr-FR')} GNF / L` },
+        { label: 'RECETTE TOTALE THÉORIQUE', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: 'Saisie enregistrée avec succès. Sortie de cuve déduite en temps réel.'
+    };
+
+    return { receipt, shift };
+  };
+
+  // Helper: Record Tank Dipstick
+  const recordTankDipstick = (data: {
+    tankId: string;
+    physicalStock: number;
+    operatorName: string;
+  }) => {
+    const tank = tanks.find(t => t.id === data.tankId);
+    if (!tank) throw new Error('Cuve introuvable');
+
+    const gap = data.physicalStock - tank.currentStock;
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+    const updatedTank: TankMock = {
+      ...tank,
+      physicalStock: data.physicalStock,
+      lastDipstickDate: nowStr
+    };
+
+    setTanks(prev => prev.map(t => t.id === data.tankId ? updatedTank : t));
+
+    const docNo = `JAUGE-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'CERTIFICAT DE JAUGEAGE ET DE DÉTECTION D\'ÉCART CUVE',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: data.operatorName,
+      fields: [
+        { label: 'Cuve Concernée', value: `${tank.code} (${tank.fuelType})` },
+        { label: 'Capacité Totale Cuve', value: `${tank.capacity.toLocaleString('fr-FR')} Litres` },
+        { label: 'Stock Théorique (Système)', value: `${tank.currentStock.toLocaleString('fr-FR')} Litres` },
+        { label: 'Stock Physique Mesuré (Jauge)', value: `${data.physicalStock.toLocaleString('fr-FR')} Litres` },
+        { label: 'Écart / Coulage Détecté', value: `${gap > 0 ? '+' : ''}${gap.toLocaleString('fr-FR')} Litres (${Math.abs(gap * 12000).toLocaleString('fr-FR')} GNF)` },
+        { label: 'Statut du Jaugeage', value: gap === 0 ? 'CONFORME (0 Litre d\'écart)' : (gap < 0 ? `PERTE / COULAGE (${gap} L)` : `EXCÉDENT (+${gap} L)`) }
+      ],
+      notes: gap < 0 
+        ? 'Alerte : Perte ou coulage potentiel détecté sur cette cuve. Vérifier fuite ou décalage index.' 
+        : 'Jaugeage certifié conforme.'
+    };
+
+    return { receipt, tank: updatedTank, gap };
+  };
+
+  // Helper: Record Fuel Delivery (Entrée de stock)
+  const recordFuelDelivery = (data: {
+    tankId: string;
+    deliveryNoteNumber: string;
+    truckPlate: string;
+    driverName: string;
+    supplier: string;
+    litersDelivered: number;
+    operatorName: string;
+  }) => {
+    const tank = tanks.find(t => t.id === data.tankId);
+    if (!tank) throw new Error('Cuve introuvable');
+
+    const delivery: FuelDeliveryMock = {
+      id: `del-${Date.now()}`,
+      stationId: tank.stationId,
+      tankId: tank.id,
+      tankCode: tank.code,
+      fuelType: tank.fuelType,
+      deliveryNoteNumber: data.deliveryNoteNumber,
+      truckPlate: data.truckPlate,
+      driverName: data.driverName,
+      supplier: data.supplier,
+      litersDelivered: data.litersDelivered,
+      operatorName: data.operatorName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    // Increase tank currentStock
+    setTanks(prev => prev.map(t => 
+      t.id === data.tankId 
+        ? { ...t, currentStock: t.currentStock + data.litersDelivered }
+        : t
+    ));
+
+    setDeliveries(prev => [delivery, ...prev]);
+
+    const docNo = `LIV-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'CERTIFICAT OFFICIEL DE RÉCEPTION & DÉPOTAGE CITERNE',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: data.operatorName,
+      fields: [
+        { label: 'N° Bon de Livraison (BL)', value: data.deliveryNoteNumber },
+        { label: 'Cuve Réceptrice', value: `${tank.code} (${tank.fuelType})` },
+        { label: 'Volume Dépoté / Réceptionné', value: `${data.litersDelivered.toLocaleString('fr-FR')} Litres` },
+        { label: 'Camion Citerne', value: data.truckPlate },
+        { label: 'Chauffeur Citerne', value: data.driverName },
+        { label: 'Dépôt Expéditeur', value: data.supplier },
+        { label: 'Nouveau Stock Théorique Cuve', value: `${(tank.currentStock + data.litersDelivered).toLocaleString('fr-FR')} Litres` }
+      ],
+      notes: 'Dépotage réceptionné conforme au bon de livraison transporteur.'
+    };
+
+    return { receipt, delivery };
+  };
+
+  // Helper: Add Subscriber
+  const addSubscriber = (data: {
+    code: string;
+    name: string;
+    phone: string;
+    address: string;
+    initialAdvance?: number;
+    initialCredit?: number;
+  }) => {
+    const newSub: SubscriberMock = {
+      id: `sub-${Date.now()}`,
+      stationId: activeStationId,
+      code: data.code.toUpperCase(),
+      name: data.name.toUpperCase(),
+      phone: data.phone,
+      address: data.address,
+      currentAdvance: data.initialAdvance || 0,
+      currentCredit: data.initialCredit || 0,
+      lastPaymentDate: new Date().toISOString().substring(0, 10)
+    };
+
+    setSubscribers(prev => [newSub, ...prev]);
+    return newSub;
+  };
+
+  // Helper: Record Subscriber Payment (Mandatory: payerName & accountNumber)
+  const recordSubscriberPayment = (data: {
+    subscriberId: string;
+    payerName: string;
+    accountNumber: string;
+    paymentMethod: 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHECK' | 'CASH';
+    referenceNo: string;
+    amount: number;
+    notes: string;
+  }) => {
+    if (!data.payerName.trim() || !data.accountNumber.trim()) {
+      throw new Error('Le Nom du Déposant et le Numéro de Compte doivent obligatoirement être renseignés !');
+    }
+
+    const sub = subscribers.find(s => s.id === data.subscriberId);
+    if (!sub) throw new Error('Abonné introuvable');
+
+    const payment: PaymentMock = {
+      id: `pay-${Date.now()}`,
+      stationId: sub.stationId,
+      subscriberId: sub.id,
+      subscriberName: sub.name,
+      payerName: data.payerName,
+      accountNumber: data.accountNumber,
+      paymentMethod: data.paymentMethod,
+      referenceNo: data.referenceNo || `REF-${Date.now()}`,
+      amount: data.amount,
+      notes: data.notes,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    setSubscribers(prev => prev.map(s => {
+      if (s.id === data.subscriberId) {
+        if (s.currentCredit > 0) {
+          const newCredit = Math.max(0, s.currentCredit - data.amount);
+          const extraAdvance = data.amount > s.currentCredit ? data.amount - s.currentCredit : 0;
+          return {
+            ...s,
+            currentCredit: newCredit,
+            currentAdvance: s.currentAdvance + extraAdvance,
+            lastPaymentDate: new Date().toISOString().substring(0, 10)
+          };
+        } else {
+          return {
+            ...s,
+            currentAdvance: s.currentAdvance + data.amount,
+            lastPaymentDate: new Date().toISOString().substring(0, 10)
+          };
+        }
+      }
+      return s;
+    }));
+
+    setPayments(prev => [payment, ...prev]);
+
+    const docNo = `VERSET-${Math.floor(10000 + Math.random() * 90000)}`;
+    const receipt: ReceiptData = {
+      title: 'RÉCÉPISSÉ OFFICIEL DE VERSEMENT ABONNÉ (CERTIFIÉ)',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: 'Caissier Principal Station',
+      fields: [
+        { label: 'Client / Abonné', value: `${sub.name} (${sub.code})` },
+        { label: 'Nom du Déposant / Payeur *', value: data.payerName },
+        { label: 'N° Compte / RIB / OM *', value: data.accountNumber },
+        { label: 'Mode de Règlement', value: data.paymentMethod },
+        { label: 'Référence Transaction / Chèque', value: payment.referenceNo },
+        { label: 'MONTANT ENCAISSÉ CERTIFIÉ', value: `${data.amount.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: data.notes || 'Versement enregistré avec succès et répercuté sur le compte abonné.'
+    };
+
+    return { receipt, payment };
+  };
+
+  // Helper: Record Subscriber Voucher / Consommation carburant à crédit
+  const recordSubscriberVoucher = (data: {
+    subscriberId: string;
+    fuelType: 'SUPER' | 'GAZOIL';
+    liters: number;
+    unitPrice: number;
+    vehiclePlate: string;
+    driverName: string;
+    voucherNo: string;
+  }) => {
+    const sub = subscribers.find(s => s.id === data.subscriberId);
+    if (!sub) throw new Error('Abonné introuvable');
+
+    const totalAmount = data.liters * data.unitPrice;
+
+    setSubscribers(prev => prev.map(s => {
+      if (s.id === data.subscriberId) {
+        return {
+          ...s,
+          currentCredit: s.currentCredit + totalAmount
+        };
+      }
+      return s;
+    }));
+
+    const docNo = `BON-CARBU-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'BON DE CARBURANT À CRÉDIT ABONNÉ CERTIFIÉ',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: 'Chef de Piste',
+      fields: [
+        { label: 'Abonné Facturé', value: `${sub.name} (${sub.code})` },
+        { label: 'N° Bon Client', value: data.voucherNo },
+        { label: 'Immatriculation Véhicule', value: data.vehiclePlate },
+        { label: 'Chauffeur Bénéficiaire', value: data.driverName },
+        { label: 'Carburant Délivré', value: `${data.fuelType} - ${data.liters.toLocaleString('fr-FR')} Litres` },
+        { label: 'Prix Unitaire', value: `${data.unitPrice.toLocaleString('fr-FR')} GNF` },
+        { label: 'MONTANT TOTAL VALISÉ', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: 'Carburant servi sur présentation de bon régulier. Montant porté au compte crédit client.'
+    };
+
+    return { receipt, totalAmount };
+  };
+
+  // Helper: Add Product
+  const addProduct = (data: {
+    code: string;
+    name: string;
+    unitType: string;
+    price: number;
+    stock: number;
+  }) => {
+    const newP: ProductMock = {
+      id: `prd-${Date.now()}`,
+      stationId: activeStationId,
+      code: data.code.toUpperCase(),
+      name: data.name.toUpperCase(),
+      unitType: data.unitType,
+      price: data.price,
+      stock: data.stock
+    };
+    setProducts(prev => [newP, ...prev]);
+    return newP;
+  };
+
+  // Helper: Record Product Sale
+  const recordProductSale = (data: {
+    productId: string;
+    quantity: number;
+    clientName: string;
+  }) => {
+    const prod = products.find(p => p.id === data.productId);
+    if (!prod) throw new Error('Produit introuvable');
+    if (prod.stock < data.quantity) {
+      throw new Error(`Stock insuffisant ! Disponible: ${prod.stock}`);
+    }
+
+    const total = prod.price * data.quantity;
+
+    setProducts(prev => prev.map(p => 
+      p.id === data.productId ? { ...p, stock: p.stock - data.quantity } : p
+    ));
+
+    const docNo = `VENTE-LUB-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'TICKET DE VENTE LUBRIFIANTS & GAZ (CERTIFIÉ)',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: 'Vendeur Boutique',
+      fields: [
+        { label: 'Désignation Produit', value: `${prod.name} (${prod.unitType})` },
+        { label: 'Quantité Vendue', value: `${data.quantity} unité(s)` },
+        { label: 'Prix Unitaire', value: `${prod.price.toLocaleString('fr-FR')} GNF` },
+        { label: 'TOTAL ENCAISSÉ', value: `${total.toLocaleString('fr-FR')} GNF` },
+        { label: 'Client / Destinataire', value: data.clientName || 'Comptant Boutique' },
+        { label: 'Stock Restant en Rayon', value: `${prod.stock - data.quantity} unités` }
+      ],
+      notes: 'Paiement comptant encaissé en caisse boutique.'
+    };
+
+    return { receipt, total };
+  };
+
+  // Helper: Restock Product
+  const restockProduct = (productId: string, quantity: number) => {
+    setProducts(prev => prev.map(p => 
+      p.id === productId ? { ...p, stock: p.stock + quantity } : p
+    ));
+  };
+
+  // Helper: Add Expense
+  const addExpense = (data: {
+    category: 'EDG' | 'GROUPE_ELECTROGENE' | 'TELEPHONE_INTERNET' | 'TRANSPORT' | 'ENTRETIEN_REPARATIONS' | 'FOURNITURES' | 'DIVERS';
+    amount: number;
+    beneficiary: string;
+    notes: string;
+  }) => {
+    const newExp: ExpenseMock = {
+      id: `exp-${Date.now()}`,
+      stationId: activeStationId,
+      category: data.category,
+      amount: data.amount,
+      beneficiary: data.beneficiary,
+      notes: data.notes,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    setExpenses(prev => [newExp, ...prev]);
+
+    const docNo = `DEPENSE-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'BON OFFICIEL DE SORTIE DE CAISSE CERTIFIÉ',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: 'Caissier Station',
+      fields: [
+        { label: 'Catégorie de Dépense', value: data.category },
+        { label: 'Bénéficiaire / Fournisseur', value: data.beneficiary },
+        { label: 'Montant Décaissé', value: `${data.amount.toLocaleString('fr-FR')} GNF` },
+        { label: 'Motif / Description', value: data.notes }
+      ],
+      notes: 'Décaissement validé sur pièce justificative par le Chef de Station.'
+    };
+
+    return { receipt, expense: newExp };
+  };
+
+  // Helper: Record Bank Deposit (Versement bancaire des recettes)
+  const recordBankDeposit = (data: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    depositorName: string;
+    slipNumber: string;
+    notes: string;
+  }) => {
+    const newExp: ExpenseMock = {
+      id: `exp-bank-${Date.now()}`,
+      stationId: activeStationId,
+      category: 'DIVERS',
+      amount: data.amount,
+      beneficiary: `BANQUE: ${data.bankName} (N° ${data.accountNumber})`,
+      notes: `Versement des recettes station - Bordereau N° ${data.slipNumber}. Déposant: ${data.depositorName}. ${data.notes}`,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+
+    setExpenses(prev => [newExp, ...prev]);
+
+    const docNo = `BORD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const receipt: ReceiptData = {
+      title: 'RÉCÉPISSÉ DE VERSEMENT BANCAIRE DES RECETTES',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: data.depositorName,
+      fields: [
+        { label: 'Banque Réceptrice', value: data.bankName },
+        { label: 'N° de Compte Station *', value: data.accountNumber },
+        { label: 'Nom du Déposant / Convoyeur *', value: data.depositorName },
+        { label: 'N° Bordereau de Versement', value: data.slipNumber },
+        { label: 'MONTANT VERSÉ À LA BANQUE', value: `${data.amount.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: 'Fonds retirés de la caisse station et déposés sur le compte bancaire officiel.'
+    };
+
+    return { receipt, expense: newExp };
+  };
+
+  // Helper: Add Employee
+  const addEmployee = (data: {
+    fullName: string;
+    jobTitle: string;
+    baseSalary: number;
+    transportAllowance: number;
+    livingAllowance: number;
+    housingAllowance: number;
+  }) => {
+    const gross = data.baseSalary + data.transportAllowance + data.livingAllowance + data.housingAllowance;
+    const newEmp: EmployeeMock = {
+      id: `emp-${Date.now()}`,
+      stationId: activeStationId,
+      fullName: data.fullName.toUpperCase(),
+      jobTitle: data.jobTitle,
+      baseSalary: data.baseSalary,
+      transportAllowance: data.transportAllowance,
+      livingAllowance: data.livingAllowance,
+      housingAllowance: data.housingAllowance,
+      shortages: 0,
+      loans: 0,
+      netSalary: gross
+    };
+
+    setEmployees(prev => [newEmp, ...prev]);
+    return newEmp;
+  };
+
+  // Helper: Update Employee
+  const updateEmployee = (
+    empId: string, 
+    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
+  ) => {
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id === empId) {
+        const updated = { ...emp, ...updates };
+        const totalAllowances = updated.transportAllowance + updated.livingAllowance + updated.housingAllowance;
+        const gross = updated.baseSalary + totalAllowances;
+        const net = gross - updated.shortages - updated.loans;
+        return { ...updated, netSalary: net };
+      }
+      return emp;
+    }));
+  };
+
+  // Helper: Generate Employee Payslip
+  const generateEmployeePayslip = (empId: string): ReceiptData | null => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return null;
+
+    const totalAllowances = emp.transportAllowance + emp.livingAllowance + emp.housingAllowance;
+    const gross = emp.baseSalary + totalAllowances;
+    const net = gross - emp.shortages - emp.loans;
+
+    const docNo = `PAIE-2026-09-${Math.floor(100 + Math.random() * 900)}`;
+    return {
+      title: 'BULLETIN DE PAIE CERTIFIÉ DE L\'EMPLOYÉ',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: 'Direction Station TotalEnergies',
+      fields: [
+        { label: 'Nom & Prénom de l\'Employé', value: emp.fullName },
+        { label: 'Poste / Fonction', value: emp.jobTitle },
+        { label: 'Période de Paie', value: 'Septembre 2026' },
+        { label: 'Salaire de Base', value: `${emp.baseSalary.toLocaleString('fr-FR')} GNF` },
+        { label: 'Primes & Indemnités (Transport, Panier, Logement)', value: `${totalAllowances.toLocaleString('fr-FR')} GNF` },
+        { label: 'SALAIRE BRUT TOTAL', value: `${gross.toLocaleString('fr-FR')} GNF` },
+        { label: 'Déductions Manquants Pompiste', value: emp.shortages > 0 ? `-${emp.shortages.toLocaleString('fr-FR')} GNF` : '0 GNF' },
+        { label: 'Déductions Prêts & Avances', value: emp.loans > 0 ? `-${emp.loans.toLocaleString('fr-FR')} GNF` : '0 GNF' },
+        { label: 'NET À PAYER COMPTANT', value: `${net.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: 'Bulletin arrêté et certifié conforme aux feuilles de tournées et aux états d\'heures.'
+    };
+  };
+
+  // Helper: Reset All Data to defaults
+  const resetAllData = () => {
+    setStations(INITIAL_STATIONS);
+    setCurrentStation(INITIAL_STATIONS[0]);
+    setUserRole('SUPER_ADMIN');
+    setTanks(INITIAL_TANKS);
+    setPumps(INITIAL_PUMPS);
+    setSubscribers(INITIAL_SUBSCRIBERS);
+    setProducts(INITIAL_PRODUCTS);
+    setPayments(INITIAL_PAYMENTS);
+    setExpenses(INITIAL_EXPENSES);
+    setEmployees(INITIAL_EMPLOYEES);
+    setDeliveries(INITIAL_DELIVERIES);
+    setPumpShifts(INITIAL_PUMP_SHIFTS);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to clear storage:', e);
+    }
+  };
+
+  return (
+    <StationContext.Provider
+      value={{
+        // Auth
+        currentUser,
+        login,
+        logout,
+        switchUserDemo,
+        allUsers: INITIAL_USERS,
+        // Navigation
+        stations,
+        currentStation,
+        setCurrentStation,
+        userRole,
+        setUserRole,
+        addStation,
+        // Data
+        tanks,
+        pumps,
+        subscribers,
+        products,
+        payments,
+        expenses,
+        employees,
+        deliveries,
+        pumpShifts,
+        // Actions
+        recordPumpShift,
+        recordTankDipstick,
+        recordFuelDelivery,
+        addSubscriber,
+        recordSubscriberPayment,
+        recordSubscriberVoucher,
+        addProduct,
+        recordProductSale,
+        restockProduct,
+        addExpense,
+        recordBankDeposit,
+        addEmployee,
+        updateEmployee,
+        generateEmployeePayslip,
+        resetAllData
+      }}
+    >
+      {children}
+    </StationContext.Provider>
+  );
+}
+
+export function useStation() {
+  const context = useContext(StationContext);
+  if (!context) {
+    throw new Error('useStation must be used within a StationProvider');
+  }
+  return context;
+}
