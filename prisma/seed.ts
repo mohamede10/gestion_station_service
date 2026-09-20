@@ -64,7 +64,7 @@ async function main() {
       {
         username: 'superadmin@totalenergies.gn',
         passwordHash: 'admin', // En production, utiliser bcrypt
-        fullName: 'M. Diallo (Directeur Réseau)',
+        fullName: 'ALASSANE CAMARA',
         role: Role.SUPER_ADMIN,
         stationId: null,
       },

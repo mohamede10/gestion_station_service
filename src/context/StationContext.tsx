@@ -29,10 +29,39 @@ import { ReceiptData } from '@/components/ReceiptModal';
 
 export type UserRole = 'SUPER_ADMIN' | 'GERANT' | 'CHEF_PISTE' | 'CAISSIER';
 
+export interface CreateStationInput {
+  code: string;
+  name: string;
+  city: string;
+  tanks?: {
+    code?: string;
+    fuelType: 'SUPER' | 'GAZOIL';
+    capacity: number;
+    initialStock: number;
+  }[];
+  pumps?: {
+    name?: string;
+    fuelType: 'SUPER' | 'GAZOIL';
+    tankIndex?: number;
+    tankId?: string;
+    unitPrice?: number;
+  }[];
+  manager?: {
+    fullName: string;
+    email: string;
+    password?: string;
+  };
+  pompistes?: {
+    fullName: string;
+    baseSalary?: number;
+  }[];
+}
+
 interface StationContextType {
   // Authentication & Session
   currentUser: UserAccountMock | null;
-  login: (email: string, password?: string) => boolean;
+  isAuthReady: boolean;
+  login: (email: string, password?: string) => Promise<boolean>;
   logout: () => void;
   switchUserDemo: (user: UserAccountMock) => void;
   allUsers: UserAccountMock[];
@@ -45,7 +74,12 @@ interface StationContextType {
   setUserRole: (role: UserRole) => void;
 
   // Station Management
-  addStation: (data: { code: string; name: string; city: string }) => StationMock;
+  addStation: (data: CreateStationInput) => Promise<StationMock>;
+  addTankToStation: (stationId: string, data: { code: string; fuelType: 'SUPER' | 'GAZOIL'; capacity: number; initialStock: number }) => TankMock;
+  addPumpToStation: (stationId: string, data: { name: string; fuelType: 'SUPER' | 'GAZOIL'; tankId: string; unitPrice?: number }) => PumpMock;
+  deleteStation: (stationId: string) => Promise<boolean>;
+  deleteTank: (tankId: string) => void;
+  deletePump: (pumpId: string) => void;
 
   // Data Collections
   tanks: TankMock[];
@@ -166,7 +200,7 @@ interface StationContextType {
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V3';
+const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V4';
 
 export function StationProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false);
@@ -211,6 +245,103 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.warn('Failed to load local storage state:', e);
     }
+
+    // Synchronisation automatique avec la base Supabase en tâche de fond
+    fetch('/api/stations')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.stations) && data.stations.length > 0) {
+          setStations(prev => {
+            const existingIds = new Set(prev.map(s => s.id));
+            const newOnes = data.stations
+              .filter((st: any) => !existingIds.has(st.id))
+              .map((st: any) => ({
+                id: st.id,
+                code: st.code,
+                name: st.name,
+                city: st.city
+              }));
+            return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+          });
+
+          const dbTanks: TankMock[] = [];
+          const dbPumps: PumpMock[] = [];
+          const dbEmployees: EmployeeMock[] = [];
+
+          data.stations.forEach((st: any) => {
+            if (st.tanks) {
+              st.tanks.forEach((t: any) => {
+                dbTanks.push({
+                  id: t.id,
+                  stationId: t.stationId,
+                  code: t.code,
+                  fuelType: t.fuelType,
+                  capacity: t.capacity,
+                  initialStock: t.initialStock,
+                  currentStock: t.currentStock,
+                  physicalStock: t.currentStock,
+                  lastDipstickDate: new Date().toISOString().substring(0, 16)
+                });
+              });
+            }
+            if (st.pumps) {
+              st.pumps.forEach((p: any) => {
+                dbPumps.push({
+                  id: p.id,
+                  stationId: p.stationId,
+                  tankId: p.tankId,
+                  name: p.name,
+                  fuelType: p.fuelType,
+                  startIndex: 0,
+                  endIndex: 0,
+                  returnToTank: 0,
+                  unitPrice: 12000
+                });
+              });
+            }
+            if (st.employees) {
+              st.employees.forEach((e: any) => {
+                dbEmployees.push({
+                  id: e.id,
+                  stationId: e.stationId,
+                  fullName: e.fullName,
+                  jobTitle: e.jobTitle,
+                  baseSalary: e.baseSalary,
+                  transportAllowance: e.transportAllowance,
+                  livingAllowance: e.livingAllowance,
+                  housingAllowance: e.housingAllowance,
+                  shortages: 0,
+                  loans: 0,
+                  netSalary: e.baseSalary
+                });
+              });
+            }
+          });
+
+          if (dbTanks.length > 0) {
+            setTanks(prev => {
+              const ids = new Set(prev.map(t => t.id));
+              const additions = dbTanks.filter(t => !ids.has(t.id));
+              return additions.length > 0 ? [...prev, ...additions] : prev;
+            });
+          }
+          if (dbPumps.length > 0) {
+            setPumps(prev => {
+              const ids = new Set(prev.map(p => p.id));
+              const additions = dbPumps.filter(p => !ids.has(p.id));
+              return additions.length > 0 ? [...prev, ...additions] : prev;
+            });
+          }
+          if (dbEmployees.length > 0) {
+            setEmployees(prev => {
+              const ids = new Set(prev.map(e => e.id));
+              const additions = dbEmployees.filter(e => !ids.has(e.id));
+              return additions.length > 0 ? [...prev, ...additions] : prev;
+            });
+          }
+        }
+      })
+      .catch(err => console.warn('Sync stations with API:', err));
   }, []);
 
   // Sync to localStorage on change
@@ -254,9 +385,50 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   // Auth Methods
-  const login = (email: string, password?: string) => {
-    const user = INITIAL_USERS.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    const trimmedEmail = email.trim().toLowerCase();
+
+    // 1. Tenter l'authentification avec la base de données Supabase via l'API
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail, password: password || 'admin' })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          const user: UserAccountMock = {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+            stationId: data.user.stationId,
+            stationName: data.user.stationName,
+            password: password
+          };
+          setCurrentUser(user);
+          setUserRole(user.role);
+          if (user.role === 'SUPER_ADMIN') {
+            setCurrentStation(null);
+          } else {
+            const targetStation = stations.find(s => s.id === user.stationId) || stations[0];
+            setCurrentStation(targetStation);
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('API auth error, falling back to local list:', err);
+    }
+
+    // 2. Fallback local pour mode hors-ligne ou compte de secours
+    const user = INITIAL_USERS.find(u => u.email.toLowerCase() === trimmedEmail);
     if (user) {
+      if (password && user.password && user.password !== password) {
+        return false;
+      }
       setCurrentUser(user);
       setUserRole(user.role);
       if (user.role === 'SUPER_ADMIN') {
@@ -289,65 +461,235 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   const activeStationId = currentStation ? currentStation.id : 'st-kissosso';
   const activeStationName = currentStation ? currentStation.name : 'TotalEnergies Kissosso';
 
-  // Helper: Add Station
-  const addStation = (data: { code: string; name: string; city: string }) => {
+  // Helper: Add Station (Complète & Flexible)
+  const addStation = async (data: CreateStationInput): Promise<StationMock> => {
+    const stationId = `st-${Date.now()}`;
+    const cleanCode = data.code.trim().toUpperCase();
+    const cleanName = data.name.trim();
+    const cleanCity = data.city.trim();
+
     const newSt: StationMock = {
-      id: `st-${Date.now()}`,
-      code: data.code.toUpperCase(),
-      name: data.name,
-      city: data.city
-    };
-    // Initialize default tanks and pumps for this new station
-    const newSuperTank: TankMock = {
-      id: `tk-super-${newSt.id}`,
-      stationId: newSt.id,
-      code: 'CUVE 01 - SUPER',
-      fuelType: 'SUPER',
-      capacity: 45000,
-      initialStock: 10000,
-      currentStock: 10000,
-      physicalStock: 10000,
-      lastDipstickDate: new Date().toISOString().substring(0, 16)
-    };
-    const newGazoilTank: TankMock = {
-      id: `tk-gazoil-${newSt.id}`,
-      stationId: newSt.id,
-      code: 'CUVE 02 - GAZOIL',
-      fuelType: 'GAZOIL',
-      capacity: 45000,
-      initialStock: 12000,
-      currentStock: 12000,
-      physicalStock: 12000,
-      lastDipstickDate: new Date().toISOString().substring(0, 16)
+      id: stationId,
+      code: cleanCode,
+      name: cleanName,
+      city: cleanCity
     };
 
-    const newPump1: PumpMock = {
-      id: `p-${newSt.id}-1`,
-      stationId: newSt.id,
-      tankId: newSuperTank.id,
-      name: 'Pompe 01 (Super)',
-      fuelType: 'SUPER',
-      startIndex: 0,
-      endIndex: 0,
-      returnToTank: 0,
-      unitPrice: 12000
-    };
-    const newPump2: PumpMock = {
-      id: `p-${newSt.id}-2`,
-      stationId: newSt.id,
-      tankId: newGazoilTank.id,
-      name: 'Pompe 02 (Gazoil)',
-      fuelType: 'GAZOIL',
-      startIndex: 0,
-      endIndex: 0,
-      returnToTank: 0,
-      unitPrice: 12000
-    };
+    // 1. Cuves personnalisées
+    const createdTanks: TankMock[] = [];
+    if (data.tanks && data.tanks.length > 0) {
+      data.tanks.forEach((t, i) => {
+        createdTanks.push({
+          id: `tk-${stationId}-${i + 1}`,
+          stationId: stationId,
+          code: t.code || `CUVE 0${i + 1} - ${t.fuelType}`,
+          fuelType: t.fuelType,
+          capacity: Number(t.capacity) || 45000,
+          initialStock: Number(t.initialStock) || 0,
+          currentStock: Number(t.initialStock) || 0,
+          physicalStock: Number(t.initialStock) || 0,
+          lastDipstickDate: new Date().toISOString().substring(0, 16)
+        });
+      });
+    } else {
+      // Cuves standard par défaut
+      createdTanks.push({
+        id: `tk-super-${stationId}`,
+        stationId: stationId,
+        code: 'CUVE 01 - SUPER',
+        fuelType: 'SUPER',
+        capacity: 45000,
+        initialStock: 10000,
+        currentStock: 10000,
+        physicalStock: 10000,
+        lastDipstickDate: new Date().toISOString().substring(0, 16)
+      });
+      createdTanks.push({
+        id: `tk-gazoil-${stationId}`,
+        stationId: stationId,
+        code: 'CUVE 02 - GAZOIL',
+        fuelType: 'GAZOIL',
+        capacity: 45000,
+        initialStock: 12000,
+        currentStock: 12000,
+        physicalStock: 12000,
+        lastDipstickDate: new Date().toISOString().substring(0, 16)
+      });
+    }
+
+    // 2. Pompes personnalisées
+    const createdPumps: PumpMock[] = [];
+    if (data.pumps && data.pumps.length > 0) {
+      data.pumps.forEach((p, i) => {
+        let assignedTankId = createdTanks[0]?.id;
+        if (p.tankIndex !== undefined && createdTanks[p.tankIndex]) {
+          assignedTankId = createdTanks[p.tankIndex].id;
+        } else if (p.tankId) {
+          assignedTankId = p.tankId;
+        } else if (p.fuelType) {
+          const match = createdTanks.find(t => t.fuelType === p.fuelType);
+          if (match) assignedTankId = match.id;
+        }
+
+        createdPumps.push({
+          id: `p-${stationId}-${i + 1}`,
+          stationId: stationId,
+          tankId: assignedTankId,
+          name: p.name || `Pompe 0${i + 1} (${p.fuelType})`,
+          fuelType: p.fuelType,
+          startIndex: 0,
+          endIndex: 0,
+          returnToTank: 0,
+          unitPrice: Number(p.unitPrice) || 12000
+        });
+      });
+    } else {
+      // Pompes standard par défaut
+      createdPumps.push({
+        id: `p-${stationId}-1`,
+        stationId: stationId,
+        tankId: createdTanks[0]?.id || `tk-super-${stationId}`,
+        name: 'Pompe 01 (Super)',
+        fuelType: 'SUPER',
+        startIndex: 0,
+        endIndex: 0,
+        returnToTank: 0,
+        unitPrice: 12000
+      });
+      createdPumps.push({
+        id: `p-${stationId}-2`,
+        stationId: stationId,
+        tankId: createdTanks[1]?.id || `tk-gazoil-${stationId}`,
+        name: 'Pompe 02 (Gazoil)',
+        fuelType: 'GAZOIL',
+        startIndex: 0,
+        endIndex: 0,
+        returnToTank: 0,
+        unitPrice: 12000
+      });
+    }
+
+    // 3. Compte Gérant si spécifié
+    if (data.manager && data.manager.email && data.manager.fullName) {
+      const managerUser: UserAccountMock = {
+        id: `usr-${Date.now()}`,
+        name: data.manager.fullName,
+        email: data.manager.email.trim().toLowerCase(),
+        password: data.manager.password || 'admin',
+        role: 'GERANT',
+        stationId: stationId,
+        stationName: cleanName
+      };
+      INITIAL_USERS.push(managerUser);
+    }
+
+    // 4. Pompistes / Employés
+    const createdEmployees: EmployeeMock[] = [];
+    if (data.pompistes && data.pompistes.length > 0) {
+      data.pompistes.forEach((emp, i) => {
+        if (emp.fullName && emp.fullName.trim()) {
+          createdEmployees.push({
+            id: `emp-${stationId}-${i + 1}`,
+            stationId: stationId,
+            fullName: emp.fullName.trim(),
+            jobTitle: 'Pompiste',
+            baseSalary: Number(emp.baseSalary) || 1500000,
+            transportAllowance: 150000,
+            livingAllowance: 150000,
+            housingAllowance: 200000,
+            shortages: 0,
+            loans: 0,
+            netSalary: 2000000
+          });
+        }
+      });
+    }
+
+    // Sauvegarde en tâche de fond dans Supabase via API
+    try {
+      fetch('/api/stations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: cleanCode,
+          name: cleanName,
+          city: cleanCity,
+          tanks: data.tanks || createdTanks,
+          pumps: data.pumps || createdPumps,
+          manager: data.manager,
+          pompistes: data.pompistes || createdEmployees
+        })
+      }).catch(err => console.warn('Sync Supabase station error:', err));
+    } catch (e) {
+      console.warn('API call error:', e);
+    }
 
     setStations(prev => [...prev, newSt]);
-    setTanks(prev => [...prev, newSuperTank, newGazoilTank]);
-    setPumps(prev => [...prev, newPump1, newPump2]);
+    setTanks(prev => [...prev, ...createdTanks]);
+    setPumps(prev => [...prev, ...createdPumps]);
+    if (createdEmployees.length > 0) {
+      setEmployees(prev => [...prev, ...createdEmployees]);
+    }
+
     return newSt;
+  };
+
+  const addTankToStation = (stationId: string, data: { code: string; fuelType: 'SUPER' | 'GAZOIL'; capacity: number; initialStock: number }): TankMock => {
+    const newTank: TankMock = {
+      id: `tk-${stationId}-${Date.now()}`,
+      stationId,
+      code: data.code,
+      fuelType: data.fuelType,
+      capacity: Number(data.capacity) || 45000,
+      initialStock: Number(data.initialStock) || 0,
+      currentStock: Number(data.initialStock) || 0,
+      physicalStock: Number(data.initialStock) || 0,
+      lastDipstickDate: new Date().toISOString().substring(0, 16)
+    };
+    setTanks(prev => [...prev, newTank]);
+    return newTank;
+  };
+
+  const addPumpToStation = (stationId: string, data: { name: string; fuelType: 'SUPER' | 'GAZOIL'; tankId: string; unitPrice?: number }): PumpMock => {
+    const newPump: PumpMock = {
+      id: `p-${stationId}-${Date.now()}`,
+      stationId,
+      tankId: data.tankId,
+      name: data.name,
+      fuelType: data.fuelType,
+      startIndex: 0,
+      endIndex: 0,
+      returnToTank: 0,
+      unitPrice: Number(data.unitPrice) || 12000
+    };
+    setPumps(prev => [...prev, newPump]);
+    return newPump;
+  };
+
+  const deleteStation = async (stationId: string): Promise<boolean> => {
+    try {
+      fetch(`/api/stations?id=${stationId}`, { method: 'DELETE' }).catch(console.warn);
+    } catch (e) {}
+
+    setStations(prev => prev.filter(s => s.id !== stationId));
+    setTanks(prev => prev.filter(t => t.stationId !== stationId));
+    setPumps(prev => prev.filter(p => p.stationId !== stationId));
+    setEmployees(prev => prev.filter(e => e.stationId !== stationId));
+    setSubscribers(prev => prev.filter(s => s.stationId !== stationId));
+    setPayments(prev => prev.filter(p => p.stationId !== stationId));
+    setExpenses(prev => prev.filter(e => e.stationId !== stationId));
+    if (currentStation?.id === stationId) {
+      setCurrentStation(null);
+    }
+    return true;
+  };
+
+  const deleteTank = (tankId: string) => {
+    setTanks(prev => prev.filter(t => t.id !== tankId));
+  };
+
+  const deletePump = (pumpId: string) => {
+    setPumps(prev => prev.filter(p => p.id !== pumpId));
   };
 
   // Helper: Record Pump Shift
@@ -919,6 +1261,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       value={{
         // Auth
         currentUser,
+        isAuthReady: isClient,
         login,
         logout,
         switchUserDemo,
@@ -930,6 +1273,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         userRole,
         setUserRole,
         addStation,
+        addTankToStation,
+        addPumpToStation,
+        deleteStation,
+        deleteTank,
+        deletePump,
         // Data
         tanks,
         pumps,

@@ -30,19 +30,19 @@ export default function LubrifiantsPage() {
 
   // Vente Flash State
   const [selectedProductId, setSelectedProductId] = useState<string>(filteredProducts[0]?.id || '');
-  const [saleQty, setSaleQty] = useState<number>(1);
+  const [saleQty, setSaleQty] = useState<string>('1');
   const [clientName, setClientName] = useState<string>('Comptant Boutique');
 
   // Restock State
   const [restockProductId, setRestockProductId] = useState<string>(filteredProducts[0]?.id || '');
-  const [restockQty, setRestockQty] = useState<number>(10);
+  const [restockQty, setRestockQty] = useState<string>('10');
 
   // New Product State
   const [newCode, setNewCode] = useState<string>('LUB-0' + (products.length + 1));
   const [newName, setNewName] = useState<string>('');
   const [newUnit, setNewUnit] = useState<string>('BIDON 5L');
-  const [newPrice, setNewPrice] = useState<number>(350000);
-  const [newStock, setNewStock] = useState<number>(20);
+  const [newPrice, setNewPrice] = useState<string>('350000');
+  const [newStock, setNewStock] = useState<string>('20');
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -56,7 +56,7 @@ export default function LubrifiantsPage() {
     try {
       const { receipt } = recordProductSale({
         productId: selectedProductId,
-        quantity: saleQty,
+        quantity: parseFloat(saleQty) || 0,
         clientName
       });
       setReceiptData(receipt);
@@ -70,9 +70,10 @@ export default function LubrifiantsPage() {
     e.preventDefault();
     if (!restockProductId) return;
 
-    restockProduct(restockProductId, restockQty);
+    const qty = parseFloat(restockQty) || 0;
+    restockProduct(restockProductId, qty);
     const prod = filteredProducts.find(p => p.id === restockProductId);
-    alert(`Réapprovisionnement de +${restockQty} unités validé pour "${prod?.name || 'le produit'}" !`);
+    alert(`Réapprovisionnement de +${qty} unités validé pour "${prod?.name || 'le produit'}" !`);
     setActiveTab('SALE');
   };
 
@@ -84,8 +85,8 @@ export default function LubrifiantsPage() {
       code: newCode,
       name: newName,
       unitType: newUnit,
-      price: newPrice,
-      stock: newStock
+      price: parseFloat(newPrice) || 0,
+      stock: parseFloat(newStock) || 0
     });
 
     alert(`Nouveau produit "${prod.name}" ajouté au catalogue boutique !`);
@@ -99,7 +100,7 @@ export default function LubrifiantsPage() {
   );
 
   const selectedProd = filteredProducts.find(p => p.id === selectedProductId) || filteredProducts[0];
-  const totalSaleAmount = (selectedProd?.price || 0) * saleQty;
+  const totalSaleAmount = (selectedProd?.price || 0) * (parseFloat(saleQty) || 0);
 
   const totalInventoryValue = filteredProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
 
@@ -171,12 +172,14 @@ export default function LubrifiantsPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Quantité Vendue :</label>
                 <input
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 1"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-base outline-none focus:border-amber-500"
                   value={saleQty}
-                  onChange={(e) => setSaleQty(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setSaleQty(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -239,12 +242,14 @@ export default function LubrifiantsPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Quantité Reçue (Unités) :</label>
                 <input
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 10"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-blue-400 font-mono font-bold text-base outline-none focus:border-blue-500"
                   value={restockQty}
-                  onChange={(e) => setRestockQty(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setRestockQty(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -306,11 +311,14 @@ export default function LubrifiantsPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Prix Vente (GNF) :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 350000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500"
                     value={newPrice}
-                    onChange={(e) => setNewPrice(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setNewPrice(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -318,11 +326,14 @@ export default function LubrifiantsPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Stock Initial :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 20"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-emerald-500"
                   value={newStock}
-                  onChange={(e) => setNewStock(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setNewStock(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 

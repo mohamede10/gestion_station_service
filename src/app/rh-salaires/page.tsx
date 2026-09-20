@@ -33,15 +33,15 @@ export default function RHSalairesPage() {
   // New Employee Form State
   const [fullName, setFullName] = useState<string>('');
   const [jobTitle, setJobTitle] = useState<string>('Pompiste');
-  const [baseSalary, setBaseSalary] = useState<number>(550000);
-  const [transportAllowance, setTransportAllowance] = useState<number>(80000);
-  const [livingAllowance, setLivingAllowance] = useState<number>(70000);
-  const [housingAllowance, setHousingAllowance] = useState<number>(50000);
+  const [baseSalary, setBaseSalary] = useState<string>('550000');
+  const [transportAllowance, setTransportAllowance] = useState<string>('80000');
+  const [livingAllowance, setLivingAllowance] = useState<string>('70000');
+  const [housingAllowance, setHousingAllowance] = useState<string>('50000');
 
   // Adjust Employee Shortages / Loans Modal/Form State
   const [selectedEmpId, setSelectedEmpId] = useState<string>(filteredEmployees[0]?.id || '');
-  const [shortagesInput, setShortagesInput] = useState<number>(0);
-  const [loansInput, setLoansInput] = useState<number>(0);
+  const [shortagesInput, setShortagesInput] = useState<string>('0');
+  const [loansInput, setLoansInput] = useState<string>('0');
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -55,10 +55,10 @@ export default function RHSalairesPage() {
     addEmployee({
       fullName,
       jobTitle,
-      baseSalary,
-      transportAllowance,
-      livingAllowance,
-      housingAllowance
+      baseSalary: parseFloat(baseSalary) || 0,
+      transportAllowance: parseFloat(transportAllowance) || 0,
+      livingAllowance: parseFloat(livingAllowance) || 0,
+      housingAllowance: parseFloat(housingAllowance) || 0
     });
 
     alert(`Employé "${fullName}" ajouté avec succès à l'effectif !`);
@@ -72,8 +72,8 @@ export default function RHSalairesPage() {
     if (!selectedEmpId) return;
 
     updateEmployee(selectedEmpId, {
-      shortages: shortagesInput,
-      loans: loansInput
+      shortages: parseFloat(shortagesInput) || 0,
+      loans: parseFloat(loansInput) || 0
     });
 
     const emp = filteredEmployees.find(e => e.id === selectedEmpId);
@@ -213,11 +213,14 @@ export default function RHSalairesPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Salaire de Base (GNF) :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 550000"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-blue-500"
                   value={baseSalary}
-                  onChange={(e) => setBaseSalary(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setBaseSalary(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -225,30 +228,39 @@ export default function RHSalairesPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1 text-[10px]">Prime Transport :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white font-mono text-xs outline-none focus:border-blue-500"
                     value={transportAllowance}
-                    onChange={(e) => setTransportAllowance(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setTransportAllowance(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1 text-[10px]">Indemnité Panier :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white font-mono text-xs outline-none focus:border-blue-500"
                     value={livingAllowance}
-                    onChange={(e) => setLivingAllowance(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setLivingAllowance(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1 text-[10px]">Indem. Logement :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white font-mono text-xs outline-none focus:border-blue-500"
                     value={housingAllowance}
-                    onChange={(e) => setHousingAllowance(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setHousingAllowance(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -282,8 +294,8 @@ export default function RHSalairesPage() {
                     setSelectedEmpId(id);
                     const emp = filteredEmployees.find(emp => emp.id === id);
                     if (emp) {
-                      setShortagesInput(emp.shortages);
-                      setLoansInput(emp.loans);
+                      setShortagesInput(String(emp.shortages));
+                      setLoansInput(String(emp.loans));
                     }
                   }}
                 >
@@ -300,11 +312,13 @@ export default function RHSalairesPage() {
                   Retenue Manquants Constatés (GNF) :
                 </label>
                 <input
-                  type="number"
-                  required
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   className="w-full bg-slate-950 border border-red-900/80 rounded-xl px-3 py-2 text-red-400 font-mono font-bold text-sm outline-none focus:border-red-500"
                   value={shortagesInput}
-                  onChange={(e) => setShortagesInput(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setShortagesInput(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
                 <span className="text-[10px] text-slate-500 mt-1 block">
                   Déduit directement du salaire net en fin de mois.
@@ -316,11 +330,13 @@ export default function RHSalairesPage() {
                   Remboursement Prêts & Avances (GNF) :
                 </label>
                 <input
-                  type="number"
-                  required
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   className="w-full bg-slate-950 border border-amber-900/80 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold text-sm outline-none focus:border-amber-500"
                   value={loansInput}
-                  onChange={(e) => setLoansInput(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setLoansInput(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 

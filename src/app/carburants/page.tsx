@@ -40,15 +40,15 @@ export default function CarburantsPage() {
 
   // Form State: Saisie Pompiste
   const [selectedPumpId, setSelectedPumpId] = useState<string>(filteredPumps[0]?.id || '');
-  const [startIndexInput, setStartIndexInput] = useState<number>(filteredPumps[0]?.startIndex || 145200);
-  const [endIndexInput, setEndIndexInput] = useState<number>(filteredPumps[0]?.endIndex || 147800);
-  const [returnToTankInput, setReturnToTankInput] = useState<number>(20);
+  const [startIndexInput, setStartIndexInput] = useState<string>(String(filteredPumps[0]?.startIndex || 145200));
+  const [endIndexInput, setEndIndexInput] = useState<string>(String(filteredPumps[0]?.endIndex || 147800));
+  const [returnToTankInput, setReturnToTankInput] = useState<string>('20');
   const [pompisteName, setPompisteName] = useState<string>('Laye Souaré');
   const [shiftType, setShiftType] = useState<'MATIN' | 'SOIR' | 'NUIT'>('MATIN');
 
   // Form State: Jaugeage
   const [selectedTankId, setSelectedTankId] = useState<string>(filteredTanks[0]?.id || '');
-  const [physicalStockInput, setPhysicalStockInput] = useState<number>(filteredTanks[0]?.physicalStock || 28350);
+  const [physicalStockInput, setPhysicalStockInput] = useState<string>(String(filteredTanks[0]?.physicalStock || 28350));
   const [dipOperator, setDipOperator] = useState<string>('Mory Diawara (CDP)');
 
   // Form State: Réception Citerne
@@ -57,7 +57,7 @@ export default function CarburantsPage() {
   const [truckPlate, setTruckPlate] = useState<string>('RC-4412-D (Citerne 45T)');
   const [driverName, setDriverName] = useState<string>('Mohamed Camara');
   const [supplier, setSupplier] = useState<string>('TotalEnergies Guinée - Dépôt Coronthie');
-  const [litersDelivered, setLitersDelivered] = useState<number>(20000);
+  const [litersDelivered, setLitersDelivered] = useState<string>('20000');
   const [deliveryOperator, setDeliveryOperator] = useState<string>('Sidiki Souaré (CDS)');
 
   // Receipt Modal State
@@ -72,9 +72,9 @@ export default function CarburantsPage() {
     try {
       const { receipt } = recordPumpShift({
         pumpId: selectedPumpId,
-        startIndex: startIndexInput,
-        endIndex: endIndexInput,
-        returnToTank: returnToTankInput,
+        startIndex: parseFloat(startIndexInput) || 0,
+        endIndex: parseFloat(endIndexInput) || 0,
+        returnToTank: parseFloat(returnToTankInput) || 0,
         pompisteName,
         shiftType
       });
@@ -92,7 +92,7 @@ export default function CarburantsPage() {
     try {
       const { receipt } = recordTankDipstick({
         tankId: selectedTankId,
-        physicalStock: physicalStockInput,
+        physicalStock: parseFloat(physicalStockInput) || 0,
         operatorName: dipOperator
       });
       setReceiptData(receipt);
@@ -113,7 +113,7 @@ export default function CarburantsPage() {
         truckPlate,
         driverName,
         supplier,
-        litersDelivered,
+        litersDelivered: parseFloat(litersDelivered) || 0,
         operatorName: deliveryOperator
       });
       setReceiptData(receipt);
@@ -129,7 +129,10 @@ export default function CarburantsPage() {
   const activePump = filteredPumps.find(p => p.id === selectedPumpId) || filteredPumps[0];
   const activeTank = filteredTanks.find(t => t.id === selectedTankId) || filteredTanks[0];
 
-  const soldLiters = Math.max(0, endIndexInput - startIndexInput - returnToTankInput);
+  const startNum = parseFloat(startIndexInput) || 0;
+  const endNum = parseFloat(endIndexInput) || 0;
+  const returnNum = parseFloat(returnToTankInput) || 0;
+  const soldLiters = Math.max(0, endNum - startNum - returnNum);
   const totalAmount = soldLiters * (activePump?.unitPrice || 12000);
 
   return (
@@ -248,8 +251,8 @@ export default function CarburantsPage() {
                     setSelectedPumpId(pId);
                     const found = filteredPumps.find(p => p.id === pId);
                     if (found) {
-                      setStartIndexInput(found.startIndex);
-                      setEndIndexInput(found.endIndex);
+                      setStartIndexInput(String(found.startIndex));
+                      setEndIndexInput(String(found.endIndex));
                     }
                   }}
                 >
@@ -291,22 +294,28 @@ export default function CarburantsPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Index Départ :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 145200"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500"
                     value={startIndexInput}
-                    onChange={(e) => setStartIndexInput(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setStartIndexInput(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Index Arrivée :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 147800"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500"
                     value={endIndexInput}
-                    onChange={(e) => setEndIndexInput(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEndIndexInput(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -314,10 +323,13 @@ export default function CarburantsPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Retour en Cuve (Essais / Purges L) :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-mono outline-none focus:border-red-500"
                   value={returnToTankInput}
-                  onChange={(e) => setReturnToTankInput(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setReturnToTankInput(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -438,11 +450,14 @@ export default function CarburantsPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Volume Dépoté (L) :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 20000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold outline-none focus:border-blue-500"
                     value={litersDelivered}
-                    onChange={(e) => setLitersDelivered(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setLitersDelivered(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -564,7 +579,7 @@ export default function CarburantsPage() {
                     const tId = e.target.value;
                     setSelectedTankId(tId);
                     const found = filteredTanks.find(t => t.id === tId);
-                    if (found) setPhysicalStockInput(found.physicalStock);
+                    if (found) setPhysicalStockInput(String(found.physicalStock));
                   }}
                 >
                   {filteredTanks.map(t => (
@@ -578,11 +593,14 @@ export default function CarburantsPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Stock Physique Mesuré à la Règle (Litres) :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 28350"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-amber-400 font-mono font-bold text-base outline-none focus:border-amber-500"
                   value={physicalStockInput}
-                  onChange={(e) => setPhysicalStockInput(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setPhysicalStockInput(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -600,7 +618,8 @@ export default function CarburantsPage() {
               {(() => {
                 const tank = activeTank;
                 if (!tank) return null;
-                const gap = physicalStockInput - tank.currentStock;
+                const parsedPhysicalStock = parseFloat(physicalStockInput) || 0;
+                const gap = parsedPhysicalStock - tank.currentStock;
 
                 return (
                   <div className={`p-4 rounded-xl border ${gap < 0 ? 'bg-red-950/70 border-red-800 text-red-300' : 'bg-emerald-950/70 border-emerald-800 text-emerald-300'}`}>
@@ -613,7 +632,7 @@ export default function CarburantsPage() {
                       </span>
                     </div>
                     <p className="text-xs opacity-90 mt-2">
-                      Théorique Système : <strong>{tank.currentStock.toLocaleString('fr-FR')} L</strong> | Règle Physique : <strong>{physicalStockInput.toLocaleString('fr-FR')} L</strong>
+                      Théorique Système : <strong>{tank.currentStock.toLocaleString('fr-FR')} L</strong> | Règle Physique : <strong>{parsedPhysicalStock.toLocaleString('fr-FR')} L</strong>
                     </p>
                   </div>
                 );

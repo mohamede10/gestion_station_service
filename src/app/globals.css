@@ -26,10 +26,24 @@
 .glass-card-hover {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .glass-card-hover:hover {
   transform: translateY(-2px);
   border-color: rgba(226, 0, 26, 0.4);
   box-shadow: 0 12px 40px 0 rgba(226, 0, 26, 0.15);
+}
+
+/* ─── Champs numériques : suppression des flèches (spinners) ─────────────── */
+/* Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* Custom Scrollbars */
@@ -37,13 +51,41 @@
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #090D16;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #1E293B;
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #E2001A;
+}
+
+/* Styles d'impression pour factures et reçus */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-print-area, #receipt-print-area * {
+    visibility: visible;
+  }
+  #receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  header, nav, aside, .no-print {
+    display: none !important;
+  }
 }

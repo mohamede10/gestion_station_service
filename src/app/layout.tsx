@@ -8,18 +8,18 @@ import Sidebar from '@/components/Sidebar';
 import { StationProvider, useStation } from '@/context/StationContext';
 
 function MainLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser, userRole, currentStation } = useStation();
+  const { currentUser, isAuthReady, userRole, currentStation } = useStation();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!currentUser && pathname !== '/login') {
+    if (isAuthReady && !currentUser && pathname !== '/login') {
       router.replace('/login');
     }
-  }, [currentUser, pathname, router]);
+  }, [isAuthReady, currentUser, pathname, router]);
 
-  // Show nothing while redirecting
-  if (!currentUser && pathname !== '/login') {
+  // Pendant l'initialisation ou la redirection
+  if (!isAuthReady || (!currentUser && pathname !== '/login')) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -37,7 +37,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans">
       <Navbar />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         <Sidebar
           userRole={userRole}
           stationName={currentStation ? currentStation.name : 'VUE CONSOLIDÉE (Toutes Stations)'}
@@ -52,7 +52,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className="dark">
+    <html lang="fr">
       <head>
         <title>TotalEnergies - Gestion Station-Service (Kissosso)</title>
         <meta name="description" content="Application Web & Mobile de Gestion Intégrée Multi-Stations TotalEnergies" />

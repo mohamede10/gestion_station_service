@@ -34,7 +34,7 @@ export default function Sidebar({ userRole, stationName }: SidebarProps) {
   ];
 
   return (
-    <aside className="w-64 bg-slate-950 border-r border-slate-800/80 p-4 flex flex-col justify-between hidden md:flex min-h-[calc(100vh-65px)]">
+    <aside className="w-64 bg-slate-950 border-r border-slate-800/80 p-4 flex flex-col justify-between hidden md:flex sticky top-[65px] h-[calc(100vh-65px)] overflow-y-auto">
       <div>
         
         {/* Active Station Context Banner */}

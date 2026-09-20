@@ -38,14 +38,14 @@ export default function AbonnesPage() {
   const [payerName, setPayerName] = useState<string>('Sékou Camara');
   const [accountNumber, setAccountNumber] = useState<string>('GN012 00100 00458912301 44');
   const [paymentMethod, setPaymentMethod] = useState<'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CHECK' | 'CASH'>('BANK_TRANSFER');
-  const [amountInput, setAmountInput] = useState<number>(2000000);
+  const [amountInput, setAmountInput] = useState<string>('2000000');
   const [refNoInput, setRefNoInput] = useState<string>('VIR-2026-0906');
   const [notesInput, setNotesInput] = useState<string>('Acompte versement sur compte flotte');
 
   // Bon Carburant à Crédit Form State
   const [voucherSubId, setVoucherSubId] = useState<string>(filteredSubscribers[0]?.id || '');
   const [fuelType, setFuelType] = useState<'SUPER' | 'GAZOIL'>('GAZOIL');
-  const [voucherLiters, setVoucherLiters] = useState<number>(100);
+  const [voucherLiters, setVoucherLiters] = useState<string>('100');
   const [voucherPlate, setVoucherPlate] = useState<string>('RC-8812-C');
   const [voucherDriver, setVoucherDriver] = useState<string>('Ibrahima Diallo');
   const [voucherNumber, setVoucherNumber] = useState<string>('BON-' + Math.floor(1000 + Math.random() * 9000));
@@ -55,7 +55,7 @@ export default function AbonnesPage() {
   const [newName, setNewName] = useState<string>('');
   const [newPhone, setNewPhone] = useState<string>('+224 ');
   const [newAddress, setNewAddress] = useState<string>('Conakry');
-  const [newInitialAdvance, setNewInitialAdvance] = useState<number>(0);
+  const [newInitialAdvance, setNewInitialAdvance] = useState<string>('0');
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -73,7 +73,7 @@ export default function AbonnesPage() {
         accountNumber,
         paymentMethod,
         referenceNo: refNoInput,
-        amount: amountInput,
+        amount: parseFloat(amountInput) || 0,
         notes: notesInput
       });
       setReceiptData(receipt);
@@ -93,7 +93,7 @@ export default function AbonnesPage() {
       const { receipt } = recordSubscriberVoucher({
         subscriberId: voucherSubId,
         fuelType,
-        liters: voucherLiters,
+        liters: parseFloat(voucherLiters) || 0,
         unitPrice: 12000,
         vehiclePlate: voucherPlate,
         driverName: voucherDriver,
@@ -117,7 +117,7 @@ export default function AbonnesPage() {
       name: newName,
       phone: newPhone,
       address: newAddress,
-      initialAdvance: newInitialAdvance,
+      initialAdvance: parseFloat(newInitialAdvance) || 0,
       initialCredit: 0
     });
 
@@ -288,11 +288,14 @@ export default function AbonnesPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Montant Versé (GNF) :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 2000000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500"
                     value={amountInput}
-                    onChange={(e) => setAmountInput(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setAmountInput(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -367,11 +370,14 @@ export default function AbonnesPage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Litres Servis :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 100"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-blue-400 font-mono font-bold outline-none focus:border-blue-500"
                     value={voucherLiters}
-                    onChange={(e) => setVoucherLiters(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setVoucherLiters(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
@@ -418,7 +424,7 @@ export default function AbonnesPage() {
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-800 text-sm font-black">
                   <span className="text-slate-300">Montant Porté au Crédit :</span>
-                  <span className="text-blue-400">{(voucherLiters * 12000).toLocaleString('fr-FR')} GNF</span>
+                  <span className="text-blue-400">{((parseFloat(voucherLiters) || 0) * 12000).toLocaleString('fr-FR')} GNF</span>
                 </div>
               </div>
 
@@ -489,10 +495,13 @@ export default function AbonnesPage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Acompte / Dépôt de garantie initial (GNF) :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="ex: 0"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-amber-500"
                   value={newInitialAdvance}
-                  onChange={(e) => setNewInitialAdvance(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setNewInitialAdvance(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 

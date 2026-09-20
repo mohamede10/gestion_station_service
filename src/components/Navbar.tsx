@@ -7,11 +7,11 @@ import { Building2, ShieldCheck, Clock, LogOut, Sparkles, RotateCcw, ChevronDown
 
 export default function Navbar() {
   const router = useRouter();
-  const { 
-    stations, 
-    currentStation, 
-    setCurrentStation, 
-    userRole, 
+  const {
+    stations,
+    currentStation,
+    setCurrentStation,
+    userRole,
     resetAllData,
     currentUser,
     logout
@@ -24,8 +24,8 @@ export default function Navbar() {
     const update = () => {
       const now = new Date();
       setTime(
-        now.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) + 
-        ' - ' + 
+        now.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) +
+        ' - ' +
         now.toLocaleTimeString('fr-FR')
       );
     };
@@ -64,14 +64,14 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 shadow-xl">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        
+
         {/* Logo & Brand */}
         <div className="flex items-center gap-3">
           <div className="relative flex items-center justify-center p-1.5 px-2 rounded-xl bg-white shadow-md shadow-black/30 border border-slate-700/40">
-            <img 
-              src="/Logo_TotalEnergies.webp" 
-              alt="TotalEnergies" 
-              className="h-8 w-auto object-contain" 
+            <img
+              src="/Logo_TotalEnergies.webp"
+              alt="TotalEnergies"
+              className="h-8 w-auto object-contain"
             />
             <span className="absolute -bottom-1 -right-1 flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -96,7 +96,7 @@ export default function Navbar() {
 
         {/* Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          
+
           {/* Station Selector (SuperAdmin only) */}
           {userRole === 'SUPER_ADMIN' && (
             <div className="relative">

@@ -31,7 +31,7 @@ export default function LoginPage() {
 
     await new Promise(r => setTimeout(r, 600)); // Simulate auth delay
 
-    const success = login(email, password);
+    const success = await login(email, password);
     if (success) {
       router.push('/');
     } else {
@@ -40,13 +40,16 @@ export default function LoginPage() {
     setLoading(false);
   };
 
-  const handleQuickLogin = (userEmail: string) => {
+  const handleQuickLogin = async (userEmail: string) => {
     setLoading(true);
     setError('');
-    setTimeout(() => {
-      login(userEmail, 'admin');
+    const success = await login(userEmail, 'admin');
+    if (success) {
       router.push('/');
-    }, 400);
+    } else {
+      setError('Impossible de se connecter avec ce compte.');
+      setLoading(false);
+    }
   };
 
   const roleColors: Record<string, string> = {
@@ -165,7 +168,7 @@ export default function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4 text-black" /> : <Eye className="w-4 h-4 text-black" />}
+                  {showPassword ? <EyeOff className="w-4 h-4 text-white" /> : <Eye className="w-4 h-4 text-white" />}
                 </button>
               </div>
             </div>

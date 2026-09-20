@@ -41,12 +41,12 @@ export default function CaissePage() {
 
   // Expense Form State
   const [category, setCategory] = useState<'EDG' | 'GROUPE_ELECTROGENE' | 'TELEPHONE_INTERNET' | 'TRANSPORT' | 'ENTRETIEN_REPARATIONS' | 'FOURNITURES' | 'DIVERS'>('EDG');
-  const [amount, setAmount] = useState<number>(350000);
+  const [amount, setAmount] = useState<string>('350000');
   const [beneficiary, setBeneficiary] = useState<string>('Électricité de Guinée (EDG)');
   const [notes, setNotes] = useState<string>('Facture électricité du mois de la station');
 
   // Bank Deposit Form State (Nom + Numéro de Compte Obligatoire)
-  const [depositAmount, setDepositAmount] = useState<number>(25000000);
+  const [depositAmount, setDepositAmount] = useState<string>('25000000');
   const [bankName, setBankName] = useState<string>('Ecobank Guinée (Agence Matoto)');
   const [bankAccountNumber, setBankAccountNumber] = useState<string>('GN012 00100 00458912301 44');
   const [depositorName, setDepositorName] = useState<string>('Sidiki Souaré (CDS)');
@@ -71,7 +71,7 @@ export default function CaissePage() {
     try {
       const { receipt } = addExpense({
         category,
-        amount,
+        amount: parseFloat(amount) || 0,
         beneficiary,
         notes
       });
@@ -91,7 +91,7 @@ export default function CaissePage() {
 
     try {
       const { receipt } = recordBankDeposit({
-        amount: depositAmount,
+        amount: parseFloat(depositAmount) || 0,
         bankName,
         accountNumber: bankAccountNumber,
         depositorName,
@@ -215,13 +215,13 @@ export default function CaissePage() {
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
                 >
-                  <option value="EDG">⚡ Électricité EDG (Électricité de Guinée)</option>
-                  <option value="GROUPE_ELECTROGENE">⛽ Groupe Électrogène (Carburant / Entretien)</option>
-                  <option value="TELEPHONE_INTERNET">📞 Téléphone & Internet Station</option>
-                  <option value="TRANSPORT">🚌 Transport & Coursiers</option>
-                  <option value="ENTRETIEN_REPARATIONS">🔧 Entretien, Réparations & Maintenance</option>
-                  <option value="FOURNITURES">📦 Fournitures de Bureau & Rouleaux Caisse</option>
-                  <option value="DIVERS">📝 Divers / Menues Dépenses</option>
+                  <option value="EDG">Électricité EDG (Électricité de Guinée)</option>
+                  <option value="GROUPE_ELECTROGENE">Groupe Électrogène (Carburant / Entretien)</option>
+                  <option value="TELEPHONE_INTERNET">Téléphone & Internet Station</option>
+                  <option value="TRANSPORT">Transport & Coursiers</option>
+                  <option value="ENTRETIEN_REPARATIONS">Entretien, Réparations & Maintenance</option>
+                  <option value="FOURNITURES">Fournitures de Bureau & Rouleaux Caisse</option>
+                  <option value="DIVERS">Divers / Menues Dépenses</option>
                 </select>
               </div>
 
@@ -240,11 +240,14 @@ export default function CaissePage() {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Montant Décaissé (GNF) :</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
+                  placeholder="ex: 350000"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-red-400 font-mono font-bold text-sm outline-none focus:border-red-500"
                   value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
               </div>
 
@@ -332,11 +335,14 @@ export default function CaissePage() {
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Montant Versé (GNF) :</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     required
+                    placeholder="ex: 25000000"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-blue-500"
                     value={depositAmount}
-                    onChange={(e) => setDepositAmount(Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDepositAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
