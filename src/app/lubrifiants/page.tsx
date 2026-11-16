@@ -19,7 +19,10 @@ export default function LubrifiantsPage() {
     products, 
     recordProductSale, 
     addProduct, 
-    restockProduct 
+    restockProduct,
+    notifySuccess,
+    notifyError,
+    generateProductCode
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -37,12 +40,17 @@ export default function LubrifiantsPage() {
   const [restockProductId, setRestockProductId] = useState<string>(filteredProducts[0]?.id || '');
   const [restockQty, setRestockQty] = useState<string>('10');
 
-  // New Product State
-  const [newCode, setNewCode] = useState<string>('LUB-0' + (products.length + 1));
+  // New Product State (Code Article auto-attribué par le système)
+  const [newCode, setNewCode] = useState<string>(generateProductCode());
   const [newName, setNewName] = useState<string>('');
   const [newUnit, setNewUnit] = useState<string>('BIDON 5L');
   const [newPrice, setNewPrice] = useState<string>('350000');
   const [newStock, setNewStock] = useState<string>('20');
+
+  // Synchronisation dynamique du Code Article
+  React.useEffect(() => {
+    setNewCode(generateProductCode());
+  }, [products.length]);
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -61,8 +69,9 @@ export default function LubrifiantsPage() {
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
+      notifySuccess(`Vente de ${saleQty} unité(s) validée avec succès !`);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de la vente');
+      notifyError(err.message || 'Erreur lors de la vente');
     }
   };
 
@@ -73,7 +82,7 @@ export default function LubrifiantsPage() {
     const qty = parseFloat(restockQty) || 0;
     restockProduct(restockProductId, qty);
     const prod = filteredProducts.find(p => p.id === restockProductId);
-    alert(`Réapprovisionnement de +${qty} unités validé pour "${prod?.name || 'le produit'}" !`);
+    notifySuccess(`Réapprovisionnement de +${qty} unités validé pour "${prod?.name || 'le produit'}" !`);
     setActiveTab('SALE');
   };
 
@@ -89,7 +98,7 @@ export default function LubrifiantsPage() {
       stock: parseFloat(newStock) || 0
     });
 
-    alert(`Nouveau produit "${prod.name}" ajouté au catalogue boutique !`);
+    notifySuccess(`Nouveau produit "${prod.name}" (${prod.code}) ajouté au catalogue boutique !`);
     setNewName('');
     setActiveTab('SALE');
   };
@@ -273,13 +282,17 @@ export default function LubrifiantsPage() {
 
             <form onSubmit={handleSaveNewProduct} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Code Article :</label>
+                <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                  <span>Code Article :</span>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded-full">Auto-attribué par le système</span>
+                </label>
                 <input
                   type="text"
                   required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold outline-none focus:border-emerald-500"
+                  readOnly
+                  className="w-full bg-slate-950/80 border border-emerald-500/30 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none cursor-not-allowed"
                   value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
+                  title="Code Article généré automatiquement par le système"
                 />
               </div>
 

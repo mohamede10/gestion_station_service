@@ -27,7 +27,10 @@ export default function CaissePage() {
     payments, 
     pumpShifts, 
     addExpense, 
-    recordBankDeposit 
+    recordBankDeposit,
+    notifySuccess,
+    notifyError,
+    notifyWarning
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -78,14 +81,14 @@ export default function CaissePage() {
       setReceiptData(receipt);
       setReceiptModalOpen(true);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de l\'enregistrement de la dépense');
+      notifyError(err.message || 'Erreur lors de l\'enregistrement de la dépense');
     }
   };
 
   const handleSaveBankDeposit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!depositorName.trim() || !bankAccountNumber.trim()) {
-      alert('Le Nom du Déposant et le Numéro de Compte de la Station sont obligatoires !');
+      notifyWarning('Le Nom du Déposant et le Numéro de Compte de la Station sont obligatoires !');
       return;
     }
 
@@ -102,7 +105,7 @@ export default function CaissePage() {
       setReceiptModalOpen(true);
       setSlipNumber('BORD-' + Math.floor(10000 + Math.random() * 90000));
     } catch (err: any) {
-      alert(err.message || 'Erreur lors du versement bancaire');
+      notifyError(err.message || 'Erreur lors du versement bancaire');
     }
   };
 

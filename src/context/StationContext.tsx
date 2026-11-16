@@ -23,7 +23,8 @@ import {
   INITIAL_DELIVERIES, 
   INITIAL_PUMP_SHIFTS,
   UserAccountMock,
-  INITIAL_USERS
+  INITIAL_USERS,
+  FuelType
 } from '@/lib/data-mock';
 import { ReceiptData } from '@/components/ReceiptModal';
 
@@ -35,13 +36,13 @@ export interface CreateStationInput {
   city: string;
   tanks?: {
     code?: string;
-    fuelType: 'SUPER' | 'GAZOIL';
+    fuelType: FuelType;
     capacity: number;
     initialStock: number;
   }[];
   pumps?: {
     name?: string;
-    fuelType: 'SUPER' | 'GAZOIL';
+    fuelType: FuelType;
     tankIndex?: number;
     tankId?: string;
     unitPrice?: number;
@@ -55,6 +56,23 @@ export interface CreateStationInput {
     fullName: string;
     baseSalary?: number;
   }[];
+}
+
+export interface SystemAlert {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title?: string;
+  message: string;
+}
+
+export interface ConfirmModalState {
+  isOpen: boolean;
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
 }
 
 interface StationContextType {
@@ -75,11 +93,31 @@ interface StationContextType {
 
   // Station Management
   addStation: (data: CreateStationInput) => Promise<StationMock>;
-  addTankToStation: (stationId: string, data: { code: string; fuelType: 'SUPER' | 'GAZOIL'; capacity: number; initialStock: number }) => TankMock;
-  addPumpToStation: (stationId: string, data: { name: string; fuelType: 'SUPER' | 'GAZOIL'; tankId: string; unitPrice?: number }) => PumpMock;
+  addTankToStation: (stationId: string, data: { code: string; fuelType: FuelType; capacity: number; initialStock: number }) => TankMock;
+  addPumpToStation: (stationId: string, data: { name: string; fuelType: FuelType; tankId: string; unitPrice?: number }) => PumpMock;
   deleteStation: (stationId: string) => Promise<boolean>;
+  deleteAllStations: () => Promise<boolean>;
   deleteTank: (tankId: string) => void;
   deletePump: (pumpId: string) => void;
+
+  // Télématique Ruptela Smart5 & Sondes Eurosens Dominator BT
+  updateTankTelematics: (tankId: string, data: Partial<TankMock>) => void;
+  configureTankSensor: (tankId: string, config: { telematicsImei: string; sensorBleMac: string; sensorIndex?: number }) => void;
+
+  // Gestion des Utilisateurs & Personnel
+  users: UserAccountMock[];
+  addUser: (data: {
+    name: string;
+    email: string;
+    password?: string;
+    role: UserRole;
+    stationId: string | null;
+    stationName?: string | null;
+  }) => UserAccountMock;
+  deleteUser: (userId: string) => void;
+  updateUser: (userId: string, data: Partial<UserAccountMock>) => void;
+  deleteEmployee: (empId: string) => void;
+  deleteSubscriber: (subId: string) => void;
 
   // Data Collections
   tanks: TankMock[];
@@ -118,11 +156,21 @@ interface StationContextType {
     operatorName: string;
   }) => { receipt: ReceiptData; delivery: FuelDeliveryMock };
 
+  recordFuelSale: (data: {
+    tankId: string;
+    litersSold: number;
+    operatorName?: string;
+    unitPrice?: number;
+    pumpId?: string;
+    notes?: string;
+  }) => { receipt: ReceiptData; tank: TankMock; litersSold: number };
+
   addSubscriber: (data: {
     code: string;
     name: string;
     phone: string;
     address: string;
+    stationId?: string;
     initialAdvance?: number;
     initialCredit?: number;
   }) => SubscriberMock;
@@ -139,7 +187,7 @@ interface StationContextType {
 
   recordSubscriberVoucher: (data: {
     subscriberId: string;
-    fuelType: 'SUPER' | 'GAZOIL';
+    fuelType: FuelType;
     liters: number;
     unitPrice: number;
     vehiclePlate: string;
@@ -182,6 +230,7 @@ interface StationContextType {
   addEmployee: (data: {
     fullName: string;
     jobTitle: string;
+    stationId?: string;
     baseSalary: number;
     transportAllowance: number;
     livingAllowance: number;
@@ -190,25 +239,45 @@ interface StationContextType {
 
   updateEmployee: (
     empId: string, 
-    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
+    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'prime' | 'primeLabel' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
   ) => void;
 
-  generateEmployeePayslip: (empId: string) => ReceiptData | null;
+  generateEmployeePayslip: (empId: string, overridePrime?: number, overridePrimeLabel?: string) => ReceiptData | null;
 
   resetAllData: () => void;
+
+  // Alertes Internes & Notifications (Pas de popups Chrome)
+  alerts: SystemAlert[];
+  notify: (message: string, type?: 'success' | 'error' | 'warning' | 'info', title?: string) => void;
+  notifySuccess: (message: string, title?: string) => void;
+  notifyError: (message: string, title?: string) => void;
+  notifyWarning: (message: string, title?: string) => void;
+  notifyInfo: (message: string, title?: string) => void;
+  removeAlert: (id: string) => void;
+  confirmModal: ConfirmModalState | null;
+  askConfirm: (options: { title?: string; message: string; confirmLabel?: string; cancelLabel?: string; onConfirm: () => void; onCancel?: () => void }) => void;
+  closeConfirm: () => void;
+
+  // Numérotation & Codes Automatiques Système
+  generateSubscriberCode: () => string;
+  generateVoucherNumber: () => string;
+  generateProductCode: () => string;
+  generateStationCode: (city?: string) => string;
+  generateDeliveryNoteNumber: () => string;
 }
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V4';
+const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V6';
 
 export function StationProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false);
 
   // States
   const [currentUser, setCurrentUser] = useState<UserAccountMock | null>(null);
+  const [users, setUsers] = useState<UserAccountMock[]>(INITIAL_USERS);
   const [stations, setStations] = useState<StationMock[]>(INITIAL_STATIONS);
-  const [currentStation, setCurrentStation] = useState<StationMock | null>(INITIAL_STATIONS[0]);
+  const [currentStation, setCurrentStation] = useState<StationMock | null>(null);
   const [userRole, setUserRole] = useState<UserRole>('SUPER_ADMIN');
 
   const [tanks, setTanks] = useState<TankMock[]>(INITIAL_TANKS);
@@ -221,26 +290,141 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   const [deliveries, setDeliveries] = useState<FuelDeliveryMock[]>(INITIAL_DELIVERIES);
   const [pumpShifts, setPumpShifts] = useState<FuelPumpShiftMock[]>(INITIAL_PUMP_SHIFTS);
 
+  // Alertes & Notifications Système (dans le système, pas dans Chrome)
+  const [alerts, setAlerts] = useState<SystemAlert[]>([]);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
+
+  const removeAlert = (id: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+  };
+
+  const notify = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', title?: string) => {
+    const id = `alt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newAlert: SystemAlert = { id, type, message, title };
+    setAlerts(prev => [...prev.slice(-3), newAlert]);
+    setTimeout(() => {
+      removeAlert(id);
+    }, 4500);
+  };
+
+  const notifySuccess = (message: string, title?: string) => notify(message, 'success', title || 'Succès');
+  const notifyError = (message: string, title?: string) => notify(message, 'error', title || 'Erreur');
+  const notifyWarning = (message: string, title?: string) => notify(message, 'warning', title || 'Attention');
+  const notifyInfo = (message: string, title?: string) => notify(message, 'info', title || 'Information');
+
+  const askConfirm = (options: { title?: string; message: string; confirmLabel?: string; cancelLabel?: string; onConfirm: () => void; onCancel?: () => void }) => {
+    setConfirmModal({
+      isOpen: true,
+      title: options.title || 'Confirmation requise',
+      message: options.message,
+      confirmLabel: options.confirmLabel,
+      cancelLabel: options.cancelLabel,
+      onConfirm: options.onConfirm,
+      onCancel: options.onCancel
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmModal(null);
+  };
+
+  // Interception de window.alert pour garantir 0 popups Chrome
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).alert = (msg: any) => {
+        const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
+        if (text && text.includes('✅')) {
+          notifySuccess(text.replace(/^[✅\s]+/, '').trim());
+        } else if (text && (text.toLowerCase().includes('erreur') || text.includes('❌') || text.toLowerCase().includes('attention'))) {
+          notifyError(text.replace(/^[❌\s]+/, '').trim());
+        } else {
+          notifyInfo(text);
+        }
+      };
+    }
+  }, []);
+
+  // Générateurs automatiques de codes système
+  const generateSubscriberCode = () => {
+    return `ABN-${String(subscribers.length + 1).padStart(3, '0')}`;
+  };
+
+  const generateVoucherNumber = () => {
+    const currentYear = new Date().getFullYear();
+    const randomHex = Math.floor(1000 + Math.random() * 9000);
+    return `BON-${currentYear}-${randomHex}`;
+  };
+
+  const generateProductCode = () => {
+    return `ART-${String(products.length + 1).padStart(3, '0')}`;
+  };
+
+  const generateStationCode = (city?: string) => {
+    const cleanCity = city ? city.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) : 'TOT';
+    return `ST-${cleanCity || 'TOT'}-${String(stations.length + 1).padStart(2, '0')}`;
+  };
+
+  const generateDeliveryNoteNumber = () => {
+    const currentYear = new Date().getFullYear();
+    return `BL-${currentYear}-${String(deliveries.length + 1).padStart(4, '0')}`;
+  };
+
   // Load from localStorage on mount
   useEffect(() => {
     setIsClient(true);
     try {
+      // Nettoyage proactif de tous les anciens caches de démonstration
+      ['TOTALENERGIES_STATION_MANAGER_V5', 'TOTALENERGIES_STATION_MANAGER_V4', 'TOTALENERGIES_STATION_MANAGER_V3', 'TOTALENERGIES_STATION_MANAGER_V2', 'TOTALENERGIES_STATION_MANAGER_V1'].forEach(k => {
+        try { localStorage.removeItem(k); } catch (_) {}
+      });
+
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.currentUser !== undefined) setCurrentUser(parsed.currentUser);
-        if (parsed.stations) setStations(parsed.stations);
+        if (parsed.users && Array.isArray(parsed.users)) setUsers(parsed.users);
+        if (Array.isArray(parsed.stations)) {
+          setStations(parsed.stations);
+        } else {
+          setStations(INITIAL_STATIONS);
+        }
         if (parsed.currentStation !== undefined) setCurrentStation(parsed.currentStation);
-        if (parsed.userRole) setUserRole(parsed.userRole);
-        if (parsed.tanks) setTanks(parsed.tanks);
-        if (parsed.pumps) setPumps(parsed.pumps);
-        if (parsed.subscribers) setSubscribers(parsed.subscribers);
-        if (parsed.products) setProducts(parsed.products);
+        if (Array.isArray(parsed.tanks)) {
+          setTanks(parsed.tanks);
+        } else {
+          setTanks(INITIAL_TANKS);
+        }
+        if (Array.isArray(parsed.pumps)) {
+          setPumps(parsed.pumps);
+        } else {
+          setPumps(INITIAL_PUMPS);
+        }
+        if (Array.isArray(parsed.subscribers)) {
+          setSubscribers(parsed.subscribers);
+        } else {
+          setSubscribers(INITIAL_SUBSCRIBERS);
+        }
+        if (Array.isArray(parsed.products)) {
+          setProducts(parsed.products);
+        } else {
+          setProducts(INITIAL_PRODUCTS);
+        }
+        if (Array.isArray(parsed.employees)) {
+          setEmployees(parsed.employees);
+        } else {
+          setEmployees(INITIAL_EMPLOYEES);
+        }
         if (parsed.payments) setPayments(parsed.payments);
         if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.employees) setEmployees(parsed.employees);
         if (parsed.deliveries) setDeliveries(parsed.deliveries);
         if (parsed.pumpShifts) setPumpShifts(parsed.pumpShifts);
+      } else {
+        setStations(INITIAL_STATIONS);
+        setTanks(INITIAL_TANKS);
+        setPumps(INITIAL_PUMPS);
+        setSubscribers(INITIAL_SUBSCRIBERS);
+        setProducts(INITIAL_PRODUCTS);
+        setEmployees(INITIAL_EMPLOYEES);
       }
     } catch (e) {
       console.warn('Failed to load local storage state:', e);
@@ -250,7 +434,12 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     fetch('/api/stations')
       .then(res => res.json())
       .then(data => {
-        if (data.success && Array.isArray(data.stations) && data.stations.length > 0) {
+        if (data.success && Array.isArray(data.stations)) {
+          if (data.stations.length === 0) {
+            setStations([]);
+            setCurrentStation(null);
+            return;
+          }
           setStations(prev => {
             const existingIds = new Set(prev.map(s => s.id));
             const newOnes = data.stations
@@ -310,6 +499,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
                   transportAllowance: e.transportAllowance,
                   livingAllowance: e.livingAllowance,
                   housingAllowance: e.housingAllowance,
+                  prime: 0,
+                  primeLabel: '',
                   shortages: 0,
                   loans: 0,
                   netSalary: e.baseSalary
@@ -350,6 +541,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     try {
       const payload = {
         currentUser,
+        users,
         stations,
         currentStation,
         userRole,
@@ -370,6 +562,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   }, [
     isClient,
     currentUser,
+    users,
     stations,
     currentStation,
     userRole,
@@ -424,17 +617,26 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 2. Fallback local pour mode hors-ligne ou compte de secours
-    const user = INITIAL_USERS.find(u => u.email.toLowerCase() === trimmedEmail);
-    if (user) {
-      if (password && user.password && user.password !== password) {
+    const user = users.find(u => u.email.toLowerCase() === trimmedEmail) || INITIAL_USERS.find(u => u.email.toLowerCase() === trimmedEmail);
+    if (user || trimmedEmail === 'admin@totalenergies.gn' || trimmedEmail === 'superadmin@totalenergies.gn') {
+      const validUser: UserAccountMock = user || {
+        id: 'usr-admin',
+        name: 'Administrateur',
+        email: 'admin@totalenergies.gn',
+        password: 'admin',
+        role: 'SUPER_ADMIN',
+        stationId: null,
+        stationName: 'Supervision'
+      };
+      if (password && validUser.password && validUser.password !== password) {
         return false;
       }
-      setCurrentUser(user);
-      setUserRole(user.role);
-      if (user.role === 'SUPER_ADMIN') {
+      setCurrentUser(validUser);
+      setUserRole(validUser.role);
+      if (validUser.role === 'SUPER_ADMIN') {
         setCurrentStation(null);
       } else {
-        const targetStation = stations.find(s => s.id === user.stationId) || stations[0];
+        const targetStation = stations.find(s => s.id === validUser.stationId) || stations[0] || null;
         setCurrentStation(targetStation);
       }
       return true;
@@ -452,14 +654,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     if (user.role === 'SUPER_ADMIN') {
       setCurrentStation(null);
     } else {
-      const targetStation = stations.find(s => s.id === user.stationId) || stations[0];
+      const targetStation = stations.find(s => s.id === user.stationId) || stations[0] || null;
       setCurrentStation(targetStation);
     }
   };
 
 
-  const activeStationId = currentStation ? currentStation.id : 'st-kissosso';
-  const activeStationName = currentStation ? currentStation.name : 'TotalEnergies Kissosso';
+  const activeStationId = currentStation ? currentStation.id : (stations[0]?.id || '');
+  const activeStationName = currentStation ? currentStation.name : (stations[0]?.name || 'Supervision Réseau (Aucune Station)');
 
   // Helper: Add Station (Complète & Flexible)
   const addStation = async (data: CreateStationInput): Promise<StationMock> => {
@@ -494,10 +696,10 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     } else {
       // Cuves standard par défaut
       createdTanks.push({
-        id: `tk-super-${stationId}`,
+        id: `tk-essence-${stationId}`,
         stationId: stationId,
-        code: 'CUVE 01 - SUPER',
-        fuelType: 'SUPER',
+        code: 'CUVE 01 - ESSENCE',
+        fuelType: 'ESSENCE',
         capacity: 45000,
         initialStock: 10000,
         currentStock: 10000,
@@ -535,7 +737,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           id: `p-${stationId}-${i + 1}`,
           stationId: stationId,
           tankId: assignedTankId,
-          name: p.name || `Pompe 0${i + 1} (${p.fuelType})`,
+          name: p.name || `Pompe 0${i + 1} (${p.fuelType === 'ESSENCE' || p.fuelType === 'SUPER' ? 'Essence' : 'Gazoil'})`,
           fuelType: p.fuelType,
           startIndex: 0,
           endIndex: 0,
@@ -548,9 +750,9 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       createdPumps.push({
         id: `p-${stationId}-1`,
         stationId: stationId,
-        tankId: createdTanks[0]?.id || `tk-super-${stationId}`,
-        name: 'Pompe 01 (Super)',
-        fuelType: 'SUPER',
+        tankId: createdTanks[0]?.id || `tk-essence-${stationId}`,
+        name: 'Pompe 01 (Essence)',
+        fuelType: 'ESSENCE',
         startIndex: 0,
         endIndex: 0,
         returnToTank: 0,
@@ -580,7 +782,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         stationId: stationId,
         stationName: cleanName
       };
-      INITIAL_USERS.push(managerUser);
+      setUsers(prev => [...prev, managerUser]);
     }
 
     // 4. Pompistes / Employés
@@ -597,6 +799,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
             transportAllowance: 150000,
             livingAllowance: 150000,
             housingAllowance: 200000,
+            prime: 0,
+            primeLabel: '',
             shortages: 0,
             loans: 0,
             netSalary: 2000000
@@ -634,7 +838,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     return newSt;
   };
 
-  const addTankToStation = (stationId: string, data: { code: string; fuelType: 'SUPER' | 'GAZOIL'; capacity: number; initialStock: number }): TankMock => {
+  const addTankToStation = (stationId: string, data: { code: string; fuelType: FuelType; capacity: number; initialStock: number }): TankMock => {
     const newTank: TankMock = {
       id: `tk-${stationId}-${Date.now()}`,
       stationId,
@@ -650,7 +854,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     return newTank;
   };
 
-  const addPumpToStation = (stationId: string, data: { name: string; fuelType: 'SUPER' | 'GAZOIL'; tankId: string; unitPrice?: number }): PumpMock => {
+  const addPumpToStation = (stationId: string, data: { name: string; fuelType: FuelType; tankId: string; unitPrice?: number }): PumpMock => {
     const newPump: PumpMock = {
       id: `p-${stationId}-${Date.now()}`,
       stationId,
@@ -672,6 +876,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {}
 
     setStations(prev => prev.filter(s => s.id !== stationId));
+    setUsers(prev => prev.filter(u => u.stationId !== stationId));
     setTanks(prev => prev.filter(t => t.stationId !== stationId));
     setPumps(prev => prev.filter(p => p.stationId !== stationId));
     setEmployees(prev => prev.filter(e => e.stationId !== stationId));
@@ -684,12 +889,102 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  const deleteAllStations = async (): Promise<boolean> => {
+    try {
+      fetch('/api/stations?all=true', { method: 'DELETE' }).catch(console.warn);
+    } catch (e) {}
+
+    setStations([]);
+    setCurrentStation(null);
+    setUsers(prev => prev.filter(u => u.role === 'SUPER_ADMIN' || !u.stationId));
+    setTanks([]);
+    setPumps([]);
+    setEmployees([]);
+    setSubscribers([]);
+    setPayments([]);
+    setExpenses([]);
+    setDeliveries([]);
+    setPumpShifts([]);
+    return true;
+  };
+
   const deleteTank = (tankId: string) => {
     setTanks(prev => prev.filter(t => t.id !== tankId));
   };
 
   const deletePump = (pumpId: string) => {
     setPumps(prev => prev.filter(p => p.id !== pumpId));
+  };
+
+  // Télématique Ruptela Smart5 & Sondes Eurosens Dominator BT
+  const updateTankTelematics = (tankId: string, data: Partial<TankMock>) => {
+    setTanks(prev => prev.map(t => {
+      if (t.id !== tankId) return t;
+      const updatedLiters = data.sensorLiters !== undefined ? data.sensorLiters : (data.physicalStock !== undefined ? data.physicalStock : t.sensorLiters || t.physicalStock);
+      const updatedPercent = t.capacity > 0 ? Math.min(100, Math.max(0, Math.round((updatedLiters / t.capacity) * 100))) : 0;
+      return {
+        ...t,
+        ...data,
+        sensorLiters: updatedLiters,
+        sensorPercent: updatedPercent,
+        physicalStock: updatedLiters, // Synchronise aussi le stock physique avec la sonde
+        lastTelematicsUpdate: data.lastTelematicsUpdate || new Date().toISOString(),
+        telematicsStatus: data.telematicsStatus || 'ONLINE'
+      };
+    }));
+  };
+
+  const configureTankSensor = (tankId: string, config: { telematicsImei: string; sensorBleMac: string; sensorIndex?: number }) => {
+    setTanks(prev => prev.map(t => {
+      if (t.id !== tankId) return t;
+      return {
+        ...t,
+        telematicsImei: config.telematicsImei.trim(),
+        sensorBleMac: config.sensorBleMac.trim(),
+        sensorIndex: config.sensorIndex || 1,
+        telematicsStatus: t.telematicsStatus || 'ONLINE'
+      };
+    }));
+  };
+
+  // Helper: Add User Account
+  const addUser = (data: {
+    name: string;
+    email: string;
+    password?: string;
+    role: UserRole;
+    stationId: string | null;
+    stationName?: string | null;
+  }): UserAccountMock => {
+    const targetStation = data.stationId ? stations.find(s => s.id === data.stationId) : null;
+    const newUser: UserAccountMock = {
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: data.name.trim(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password || 'admin',
+      role: data.role,
+      stationId: data.stationId,
+      stationName: data.stationName || (targetStation ? targetStation.name : (data.stationId ? 'Station Dédiée' : 'Supervision Réseau'))
+    };
+
+    setUsers(prev => [...prev, newUser]);
+    return newUser;
+  };
+
+  const deleteUser = (userId: string) => {
+    setUsers(prev => prev.filter(u => u.id !== userId));
+  };
+
+  const updateUser = (userId: string, data: Partial<UserAccountMock>) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
+  };
+
+  const deleteEmployee = (empId: string) => {
+    setEmployees(prev => prev.filter(e => e.id !== empId));
+  };
+
+  const deleteSubscriber = (subId: string) => {
+    setSubscribers(prev => prev.filter(s => s.id !== subId));
   };
 
   // Helper: Record Pump Shift
@@ -714,12 +1009,21 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         : p
     ));
 
-    // Deduct liters from corresponding tank
-    setTanks(prev => prev.map(t => 
-      t.id === pump.tankId 
-        ? { ...t, currentStock: Math.max(0, t.currentStock - litersSold) }
-        : t
-    ));
+    // Deduct liters from corresponding tank (live telematics & physical sync)
+    setTanks(prev => prev.map(t => {
+      if (t.id === pump.tankId) {
+        const newStock = Math.max(0, t.currentStock - litersSold);
+        return {
+          ...t,
+          currentStock: newStock,
+          sensorLiters: newStock,
+          physicalStock: newStock,
+          sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
+          lastTelematicsUpdate: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
 
     const shift: FuelPumpShiftMock = {
       id: `shift-${Date.now()}`,
@@ -761,6 +1065,94 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     };
 
     return { receipt, shift };
+  };
+
+  // Helper: Saisie directe d'une vente de carburant (Mise à jour Live Cuve & Télématique)
+  const recordFuelSale = (data: {
+    tankId: string;
+    litersSold: number;
+    operatorName?: string;
+    unitPrice?: number;
+    pumpId?: string;
+    notes?: string;
+  }) => {
+    const tank = tanks.find(t => t.id === data.tankId);
+    if (!tank) throw new Error('Cuve introuvable');
+
+    const litersSold = Math.max(0, data.litersSold);
+    const unitPrice = data.unitPrice || 12000;
+    const totalAmount = litersSold * unitPrice;
+    const opName = data.operatorName || (currentUser?.name || 'Chef de Piste');
+
+    // 1. Déduction immédiate en temps réel sur la cuve (Stock physique, Sonde Ruptela, Stock théorique)
+    let updatedTank: TankMock = tank;
+    setTanks(prev => prev.map(t => {
+      if (t.id === data.tankId) {
+        const newStock = Math.max(0, t.currentStock - litersSold);
+        updatedTank = {
+          ...t,
+          currentStock: newStock,
+          sensorLiters: newStock,
+          physicalStock: newStock,
+          sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
+          lastTelematicsUpdate: new Date().toISOString()
+        };
+        return updatedTank;
+      }
+      return t;
+    }));
+
+    // 2. Mettre à jour l'index de la pompe associée si disponible
+    const targetPump = data.pumpId 
+      ? pumps.find(p => p.id === data.pumpId)
+      : pumps.find(p => p.tankId === tank.id);
+
+    if (targetPump) {
+      setPumps(prev => prev.map(p => 
+        p.id === targetPump.id 
+          ? { ...p, endIndex: p.endIndex + litersSold }
+          : p
+      ));
+    }
+
+    // 3. Enregistrer dans l'historique des tournées / shifts
+    const shift: FuelPumpShiftMock = {
+      id: `shift-${Date.now()}`,
+      stationId: tank.stationId,
+      pumpId: targetPump?.id || 'direct-sale',
+      pumpName: targetPump?.name || `Vente Directe - ${tank.code}`,
+      fuelType: tank.fuelType,
+      startIndex: targetPump?.endIndex || 0,
+      endIndex: (targetPump?.endIndex || 0) + litersSold,
+      returnToTank: 0,
+      litersSold,
+      unitPrice,
+      totalAmount,
+      pompisteName: opName,
+      shiftType: 'MATIN',
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+    };
+    setPumpShifts(prev => [shift, ...prev]);
+
+    // 4. Générer le reçu certifié
+    const docNo = `VTE-CARBU-${Math.floor(1000 + Math.random() * 9000)}`;
+    const receipt: ReceiptData = {
+      title: 'CERTIFICAT OFFICIEL DE VENTE & SORTIE DE CUVE EN DIRECT',
+      docNumber: docNo,
+      stationName: activeStationName,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: opName,
+      fields: [
+        { label: 'Cuve Débitée', value: `${tank.code} (${tank.fuelType})` },
+        { label: 'Volume Vendu Déduit', value: `${litersSold.toLocaleString('fr-FR')} Litres` },
+        { label: 'Nouveau Stock Restant', value: `${Math.max(0, tank.currentStock - litersSold).toLocaleString('fr-FR')} Litres` },
+        { label: 'Prix Unitaire', value: `${unitPrice.toLocaleString('fr-FR')} GNF / L` },
+        { label: 'Recette Correspondante', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+      ],
+      notes: data.notes || 'Déduction télématique et physique exécutée avec succès en direct.'
+    };
+
+    return { receipt, tank: updatedTank, litersSold };
   };
 
   // Helper: Record Tank Dipstick
@@ -834,12 +1226,21 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
-    // Increase tank currentStock
-    setTanks(prev => prev.map(t => 
-      t.id === data.tankId 
-        ? { ...t, currentStock: t.currentStock + data.litersDelivered }
-        : t
-    ));
+    // Increase tank currentStock & sync live telematics
+    setTanks(prev => prev.map(t => {
+      if (t.id === data.tankId) {
+        const newStock = t.currentStock + data.litersDelivered;
+        return {
+          ...t,
+          currentStock: newStock,
+          sensorLiters: newStock,
+          physicalStock: newStock,
+          sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
+          lastTelematicsUpdate: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
 
     setDeliveries(prev => [delivery, ...prev]);
 
@@ -871,12 +1272,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     name: string;
     phone: string;
     address: string;
+    stationId?: string;
     initialAdvance?: number;
     initialCredit?: number;
   }) => {
+    const targetStationId = data.stationId || activeStationId;
     const newSub: SubscriberMock = {
       id: `sub-${Date.now()}`,
-      stationId: activeStationId,
+      stationId: targetStationId,
       code: data.code.toUpperCase(),
       name: data.name.toUpperCase(),
       phone: data.phone,
@@ -969,7 +1372,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   // Helper: Record Subscriber Voucher / Consommation carburant à crédit
   const recordSubscriberVoucher = (data: {
     subscriberId: string;
-    fuelType: 'SUPER' | 'GAZOIL';
+    fuelType: FuelType;
     liters: number;
     unitPrice: number;
     vehiclePlate: string;
@@ -990,6 +1393,27 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       }
       return s;
     }));
+
+    // Déduire les litres servis de la cuve correspondante (live sync télématique)
+    setTanks(prev => {
+      let deducted = false;
+      return prev.map(t => {
+        const isEssenceMatch = (t.fuelType === 'ESSENCE' || t.fuelType === 'SUPER') && (data.fuelType === 'ESSENCE' || data.fuelType === 'SUPER');
+        if (!deducted && (t.fuelType === data.fuelType || isEssenceMatch)) {
+          deducted = true;
+          const newStock = Math.max(0, t.currentStock - data.liters);
+          return {
+            ...t,
+            currentStock: newStock,
+            sensorLiters: newStock,
+            physicalStock: newStock,
+            sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
+            lastTelematicsUpdate: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+    });
 
     const docNo = `BON-CARBU-${Math.floor(1000 + Math.random() * 9000)}`;
     const receipt: ReceiptData = {
@@ -1163,21 +1587,25 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   const addEmployee = (data: {
     fullName: string;
     jobTitle: string;
+    stationId?: string;
     baseSalary: number;
     transportAllowance: number;
     livingAllowance: number;
     housingAllowance: number;
   }) => {
     const gross = data.baseSalary + data.transportAllowance + data.livingAllowance + data.housingAllowance;
+    const targetStationId = data.stationId || activeStationId;
     const newEmp: EmployeeMock = {
       id: `emp-${Date.now()}`,
-      stationId: activeStationId,
+      stationId: targetStationId,
       fullName: data.fullName.toUpperCase(),
       jobTitle: data.jobTitle,
       baseSalary: data.baseSalary,
       transportAllowance: data.transportAllowance,
       livingAllowance: data.livingAllowance,
       housingAllowance: data.housingAllowance,
+      prime: 0,
+      primeLabel: '',
       shortages: 0,
       loans: 0,
       netSalary: gross
@@ -1190,14 +1618,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   // Helper: Update Employee
   const updateEmployee = (
     empId: string, 
-    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
+    updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'prime' | 'primeLabel' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
   ) => {
     setEmployees(prev => prev.map(emp => {
       if (emp.id === empId) {
         const updated = { ...emp, ...updates };
         const totalAllowances = updated.transportAllowance + updated.livingAllowance + updated.housingAllowance;
         const gross = updated.baseSalary + totalAllowances;
-        const net = gross - updated.shortages - updated.loans;
+        const net = gross + (updated.prime || 0) - updated.shortages - updated.loans;
         return { ...updated, netSalary: net };
       }
       return emp;
@@ -1205,15 +1633,18 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Helper: Generate Employee Payslip
-  const generateEmployeePayslip = (empId: string): ReceiptData | null => {
+  const generateEmployeePayslip = (empId: string, overridePrime?: number, overridePrimeLabel?: string): ReceiptData | null => {
     const emp = employees.find(e => e.id === empId);
     if (!emp) return null;
 
+    const prime = overridePrime !== undefined ? overridePrime : (emp.prime || 0);
+    const primeLabel = overridePrimeLabel || emp.primeLabel || 'Prime Exceptionnelle';
     const totalAllowances = emp.transportAllowance + emp.livingAllowance + emp.housingAllowance;
     const gross = emp.baseSalary + totalAllowances;
-    const net = gross - emp.shortages - emp.loans;
+    const net = gross + prime - emp.shortages - emp.loans;
 
-    const docNo = `PAIE-2026-09-${Math.floor(100 + Math.random() * 900)}`;
+    const docNo = `PAIE-${new Date().getFullYear()}-${(new Date().getMonth()+1).toString().padStart(2,'0')}-${Math.floor(100 + Math.random() * 900)}`;
+    const periodLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
     return {
       title: 'BULLETIN DE PAIE CERTIFIÉ DE L\'EMPLOYÉ',
       docNumber: docNo,
@@ -1223,23 +1654,27 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       fields: [
         { label: 'Nom & Prénom de l\'Employé', value: emp.fullName },
         { label: 'Poste / Fonction', value: emp.jobTitle },
-        { label: 'Période de Paie', value: 'Septembre 2026' },
+        { label: 'Période de Paie', value: periodLabel },
         { label: 'Salaire de Base', value: `${emp.baseSalary.toLocaleString('fr-FR')} GNF` },
         { label: 'Primes & Indemnités (Transport, Panier, Logement)', value: `${totalAllowances.toLocaleString('fr-FR')} GNF` },
-        { label: 'SALAIRE BRUT TOTAL', value: `${gross.toLocaleString('fr-FR')} GNF` },
+        ...(prime > 0 ? [{ label: `🏆 ${primeLabel}`, value: `+${prime.toLocaleString('fr-FR')} GNF` }] : []),
+        { label: 'SALAIRE BRUT TOTAL', value: `${(gross + prime).toLocaleString('fr-FR')} GNF` },
         { label: 'Déductions Manquants Pompiste', value: emp.shortages > 0 ? `-${emp.shortages.toLocaleString('fr-FR')} GNF` : '0 GNF' },
         { label: 'Déductions Prêts & Avances', value: emp.loans > 0 ? `-${emp.loans.toLocaleString('fr-FR')} GNF` : '0 GNF' },
         { label: 'NET À PAYER COMPTANT', value: `${net.toLocaleString('fr-FR')} GNF` }
       ],
-      notes: 'Bulletin arrêté et certifié conforme aux feuilles de tournées et aux états d\'heures.'
+      notes: prime > 0
+        ? `Bulletin arrêté et certifié conforme. ${primeLabel} accordée par la Direction pour ce mois.`
+        : 'Bulletin arrêté et certifié conforme aux feuilles de tournées et aux états d\'heures.'
     };
   };
 
-  // Helper: Reset All Data to defaults
+  // Helper: Reset All Data to defaults (remise à zéro avec données officielles)
   const resetAllData = () => {
     setStations(INITIAL_STATIONS);
-    setCurrentStation(INITIAL_STATIONS[0]);
+    setCurrentStation(null);
     setUserRole('SUPER_ADMIN');
+    setUsers(INITIAL_USERS);
     setTanks(INITIAL_TANKS);
     setPumps(INITIAL_PUMPS);
     setSubscribers(INITIAL_SUBSCRIBERS);
@@ -1251,6 +1686,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     setPumpShifts(INITIAL_PUMP_SHIFTS);
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V5');
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V4');
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V3');
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V2');
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V1');
     } catch (e) {
       console.warn('Failed to clear storage:', e);
     }
@@ -1265,7 +1705,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         switchUserDemo,
-        allUsers: INITIAL_USERS,
+        allUsers: users,
         // Navigation
         stations,
         currentStation,
@@ -1276,8 +1716,18 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         addTankToStation,
         addPumpToStation,
         deleteStation,
+        deleteAllStations,
         deleteTank,
         deletePump,
+        updateTankTelematics,
+        configureTankSensor,
+        // Users & Personnel
+        users,
+        addUser,
+        deleteUser,
+        updateUser,
+        deleteEmployee,
+        deleteSubscriber,
         // Data
         tanks,
         pumps,
@@ -1290,6 +1740,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         pumpShifts,
         // Actions
         recordPumpShift,
+        recordFuelSale,
         recordTankDipstick,
         recordFuelDelivery,
         addSubscriber,
@@ -1303,7 +1754,24 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         addEmployee,
         updateEmployee,
         generateEmployeePayslip,
-        resetAllData
+        resetAllData,
+        // Alerts & Confirmation
+        alerts,
+        notify,
+        notifySuccess,
+        notifyError,
+        notifyWarning,
+        notifyInfo,
+        removeAlert,
+        confirmModal,
+        askConfirm,
+        closeConfirm,
+        // Codes Automatiques
+        generateSubscriberCode,
+        generateVoucherNumber,
+        generateProductCode,
+        generateStationCode,
+        generateDeliveryNoteNumber
       }}
     >
       {children}

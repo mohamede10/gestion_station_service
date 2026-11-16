@@ -148,11 +148,17 @@ export async function POST(req: Request) {
   }
 }
 
-// DELETE: Supprime une station
+// DELETE: Supprime une station ou toutes les stations
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const all = searchParams.get('all');
+
+    if (all === 'true') {
+      await prisma.station.deleteMany({});
+      return NextResponse.json({ success: true, message: 'Toutes les stations ont été supprimées avec succès.' });
+    }
 
     if (!id) {
       return NextResponse.json({ success: false, message: 'ID de la station requis' }, { status: 400 });

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useStation } from '@/context/StationContext';
 import { 
   Fuel, 
@@ -13,9 +14,11 @@ import {
   ArrowDownLeft, 
   ArrowUpRight, 
   History,
-  TrendingDown
+  TrendingDown,
+  Radio
 } from 'lucide-react';
 import ReceiptModal, { ReceiptData } from '@/components/ReceiptModal';
+import { formatFuelName } from '@/lib/data-mock';
 
 export default function CarburantsPage() {
   const { 
@@ -26,7 +29,10 @@ export default function CarburantsPage() {
     pumpShifts, 
     recordPumpShift, 
     recordTankDipstick, 
-    recordFuelDelivery 
+    recordFuelDelivery,
+    notifySuccess,
+    notifyError,
+    generateDeliveryNoteNumber
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -40,25 +46,30 @@ export default function CarburantsPage() {
 
   // Form State: Saisie Pompiste
   const [selectedPumpId, setSelectedPumpId] = useState<string>(filteredPumps[0]?.id || '');
-  const [startIndexInput, setStartIndexInput] = useState<string>(String(filteredPumps[0]?.startIndex || 145200));
-  const [endIndexInput, setEndIndexInput] = useState<string>(String(filteredPumps[0]?.endIndex || 147800));
-  const [returnToTankInput, setReturnToTankInput] = useState<string>('20');
+  const [startIndexInput, setStartIndexInput] = useState<string>(String(filteredPumps[0]?.startIndex || 0));
+  const [endIndexInput, setEndIndexInput] = useState<string>(String(filteredPumps[0]?.endIndex || 0));
+  const [returnToTankInput, setReturnToTankInput] = useState<string>('0');
   const [pompisteName, setPompisteName] = useState<string>('Laye Souaré');
   const [shiftType, setShiftType] = useState<'MATIN' | 'SOIR' | 'NUIT'>('MATIN');
 
   // Form State: Jaugeage
   const [selectedTankId, setSelectedTankId] = useState<string>(filteredTanks[0]?.id || '');
-  const [physicalStockInput, setPhysicalStockInput] = useState<string>(String(filteredTanks[0]?.physicalStock || 28350));
+  const [physicalStockInput, setPhysicalStockInput] = useState<string>(String(filteredTanks[0]?.physicalStock || 0));
   const [dipOperator, setDipOperator] = useState<string>('Mory Diawara (CDP)');
 
-  // Form State: Réception Citerne
+  // Form State: Réception Citerne (N° BL auto-attribué par le système)
   const [deliveryTankId, setDeliveryTankId] = useState<string>(filteredTanks[0]?.id || '');
-  const [deliveryNoteNo, setDeliveryNoteNo] = useState<string>('BL-TEG-' + Math.floor(1000 + Math.random() * 9000));
+  const [deliveryNoteNo, setDeliveryNoteNo] = useState<string>(generateDeliveryNoteNumber());
   const [truckPlate, setTruckPlate] = useState<string>('RC-4412-D (Citerne 45T)');
   const [driverName, setDriverName] = useState<string>('Mohamed Camara');
   const [supplier, setSupplier] = useState<string>('TotalEnergies Guinée - Dépôt Coronthie');
   const [litersDelivered, setLitersDelivered] = useState<string>('20000');
   const [deliveryOperator, setDeliveryOperator] = useState<string>('Sidiki Souaré (CDS)');
+
+  // Synchronisation dynamique du N° de BL
+  React.useEffect(() => {
+    setDeliveryNoteNo(generateDeliveryNoteNumber());
+  }, [deliveries.length]);
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -80,8 +91,9 @@ export default function CarburantsPage() {
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
+      notifySuccess(`Relevé de pompe enregistré avec succès !`);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de l\'enregistrement de la tournée');
+      notifyError(err.message || 'Erreur lors de l\'enregistrement de la tournée');
     }
   };
 
@@ -90,15 +102,16 @@ export default function CarburantsPage() {
     if (!selectedTankId) return;
 
     try {
-      const { receipt } = recordTankDipstick({
+      const { receipt, gap } = recordTankDipstick({
         tankId: selectedTankId,
         physicalStock: parseFloat(physicalStockInput) || 0,
         operatorName: dipOperator
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
+      notifySuccess(`Jaugeage enregistré avec succès ! Écart : ${gap} L.`);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors du jaugeage');
+      notifyError(err.message || 'Erreur lors du jaugeage');
     }
   };
 
@@ -118,10 +131,10 @@ export default function CarburantsPage() {
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
-      // Reset BL number for next delivery
-      setDeliveryNoteNo('BL-TEG-' + Math.floor(1000 + Math.random() * 9000));
+      notifySuccess(`Livraison "${deliveryNoteNo}" de ${(parseFloat(litersDelivered) || 0).toLocaleString('fr-FR')} L enregistrée avec succès !`);
+      setDeliveryNoteNo(generateDeliveryNoteNumber());
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de l\'enregistrement de la livraison');
+      notifyError(err.message || 'Erreur lors de l\'enregistrement de la livraison');
     }
   };
 
@@ -176,6 +189,14 @@ export default function CarburantsPage() {
           >
             Historique & Audit
           </button>
+          <Link
+            href="/telematics"
+            className="px-3 py-1.5 rounded-lg font-bold bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600 hover:text-white transition flex items-center gap-1.5 ml-auto text-xs"
+          >
+            <Radio className="w-3.5 h-3.5 animate-pulse text-red-400" />
+            <span>Sondes IoT (Ruptela)</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          </Link>
         </div>
       </div>
 
@@ -189,10 +210,10 @@ export default function CarburantsPage() {
             <div key={tank.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Droplets className={`w-5 h-5 ${tank.fuelType === 'SUPER' ? 'text-red-500' : 'text-amber-400'}`} />
+                  <Droplets className={`w-5 h-5 ${(tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE') ? 'text-red-500' : 'text-amber-400'}`} />
                   <div>
                     <h4 className="font-extrabold text-sm text-white">{tank.code}</h4>
-                    <span className="text-[10px] font-bold text-slate-400">{tank.fuelType}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{tank.fuelType === 'SUPER' ? 'ESSENCE' : tank.fuelType}</span>
                   </div>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-950 border border-slate-800 text-slate-300">
@@ -203,7 +224,7 @@ export default function CarburantsPage() {
               {/* Progress bar */}
               <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div 
-                  className={`h-full rounded-full transition-all duration-500 ${tank.fuelType === 'SUPER' ? 'bg-gradient-to-r from-red-600 to-rose-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} 
+                  className={`h-full rounded-full transition-all duration-500 ${(tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE') ? 'bg-gradient-to-r from-red-600 to-rose-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} 
                   style={{ width: `${fillPercentage}%` }}
                 ></div>
               </div>
@@ -216,6 +237,16 @@ export default function CarburantsPage() {
                 <div className="flex justify-between text-slate-400">
                   <span>Stock Jauge Physique :</span>
                   <span className="font-bold text-amber-300 font-mono">{tank.physicalStock.toLocaleString('fr-FR')} L</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 pt-1 border-t border-slate-800/60">
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Sonde Ruptela :
+                  </span>
+                  <Link href="/telematics" className="text-[11px] font-bold text-amber-400 font-mono hover:underline flex items-center gap-1">
+                    {(tank.sensorLiters || tank.physicalStock).toLocaleString('fr-FR')} L
+                    <Radio className="w-3 h-3 text-red-500" />
+                  </Link>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-800/80">
                   <span>Écart Détecté :</span>
@@ -376,8 +407,8 @@ export default function CarburantsPage() {
                     <div key={p.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="font-extrabold text-sm text-white">{p.name}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${p.fuelType === 'SUPER' ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
-                          {p.fuelType}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${(p.fuelType === 'SUPER' || p.fuelType === 'ESSENCE') ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                          {p.fuelType === 'SUPER' ? 'ESSENCE' : p.fuelType}
                         </span>
                       </div>
 
@@ -437,13 +468,17 @@ export default function CarburantsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">N° Bon Livraison (BL) :</label>
+                  <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                    <span>N° Bon Livraison (BL) :</span>
+                    <span className="text-[10px] text-blue-400 font-bold bg-blue-950/80 border border-blue-800/60 px-2 py-0.5 rounded-full">Auto-attribué</span>
+                  </label>
                   <input
                     type="text"
                     required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-blue-400 font-mono font-bold outline-none focus:border-blue-500"
+                    readOnly
+                    className="w-full bg-slate-950/80 border border-blue-500/30 rounded-xl px-3 py-2 text-blue-400 font-mono font-bold outline-none cursor-not-allowed"
                     value={deliveryNoteNo}
-                    onChange={(e) => setDeliveryNoteNo(e.target.value)}
+                    title="N° de Bon de Livraison attribué automatiquement par le système"
                   />
                 </div>
 

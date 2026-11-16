@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X, Printer, ShieldCheck, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { useStation } from '@/context/StationContext';
 
 export interface ReceiptData {
   title: string;
@@ -20,6 +21,7 @@ interface ReceiptModalProps {
 }
 
 export default function ReceiptModal({ isOpen, onClose, data }: ReceiptModalProps) {
+  const { notifyWarning } = useStation();
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,7 +44,7 @@ export default function ReceiptModal({ isOpen, onClose, data }: ReceiptModalProp
     const newWindow = window.open('', '_blank', 'width=850,height=950,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
 
     if (!newWindow) {
-      alert("Veuillez autoriser les fenêtres pop-up dans votre navigateur pour ouvrir ce document.");
+      notifyWarning("Veuillez autoriser les fenêtres pop-up dans votre navigateur pour ouvrir ce document.");
       return;
     }
 

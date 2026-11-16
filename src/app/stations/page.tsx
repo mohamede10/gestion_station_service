@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useStation, CreateStationInput } from '@/context/StationContext';
+import { useStation, CreateStationInput, UserRole } from '@/context/StationContext';
 import { 
   Building2, 
   Plus, 
@@ -21,7 +21,12 @@ import {
   X,
   Sparkles,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  UserPlus,
+  CreditCard,
+  KeyRound,
+  HardHat,
+  RotateCcw
 } from 'lucide-react';
 
 export default function StationsPage() {
@@ -34,32 +39,133 @@ export default function StationsPage() {
     pumps, 
     employees, 
     subscribers,
+    users,
+    addUser,
+    deleteUser,
+    addEmployee,
+    deleteEmployee,
+    addSubscriber,
+    deleteSubscriber,
     addTankToStation,
     addPumpToStation,
     deleteStation,
+    deleteAllStations,
     deleteTank,
-    deletePump
+    deletePump,
+    userRole,
+    resetAllData,
+    notifySuccess,
+    notifyError,
+    askConfirm,
+    generateStationCode,
+    generateSubscriberCode
   } = useStation();
+
+  // Modal de confirmation de suppression de TOUTES les stations
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // ── Admin Console Tabs ──────────────────────────────────────────────────────
+  const [adminTab, setAdminTab] = useState<'GERANTS' | 'POMPISTES' | 'ABONNES'>('GERANTS');
+
+  // ── Form: Nouveau Compte Gérant / Accès ─────────────────────────────────────
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('admin');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('GERANT');
+  const [newUserStationId, setNewUserStationId] = useState(stations[0]?.id || '');
+
+  const handleAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserEmail.trim()) return;
+    addUser({
+      name: newUserName.trim(),
+      email: newUserEmail.trim().toLowerCase(),
+      password: newUserPassword || 'admin',
+      role: newUserRole,
+      stationId: newUserRole === 'SUPER_ADMIN' ? null : (newUserStationId || null),
+    });
+    notifySuccess(`Compte "${newUserName}" créé avec succès ! Il peut maintenant se connecter.`);
+    setNewUserName('');
+    setNewUserEmail('');
+    setNewUserPassword('admin');
+  };
+
+  // ── Form: Nouveau Pompiste ───────────────────────────────────────────────────
+  const [newEmpName, setNewEmpName] = useState('');
+  const [newEmpTitle, setNewEmpTitle] = useState('Pompiste');
+  const [newEmpSalary, setNewEmpSalary] = useState('550000');
+  const [newEmpStation, setNewEmpStation] = useState(stations[0]?.id || '');
+
+  const handleAddEmp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmpName.trim()) return;
+    addEmployee({
+      fullName: newEmpName.trim(),
+      jobTitle: newEmpTitle,
+      stationId: newEmpStation || undefined,
+      baseSalary: parseFloat(newEmpSalary) || 550000,
+      transportAllowance: 80000,
+      livingAllowance: 70000,
+      housingAllowance: 50000,
+    });
+    notifySuccess(`Pompiste "${newEmpName}" ajouté avec succès à l'effectif !`);
+    setNewEmpName('');
+  };
+
+  // ── Form: Nouvel Abonné (Code Client auto-attribué par le système) ─────────────
+  const [newSubCode, setNewSubCode] = useState(() => generateSubscriberCode());
+  const [newSubName, setNewSubName] = useState('');
+  const [newSubPhone, setNewSubPhone] = useState('+224 ');
+  const [newSubAddress, setNewSubAddress] = useState('Conakry');
+  const [newSubStation, setNewSubStation] = useState(stations[0]?.id || '');
+  const [newSubAdvance, setNewSubAdvance] = useState('0');
+
+  // Synchronisation dynamique du Code Client
+  React.useEffect(() => {
+    setNewSubCode(generateSubscriberCode());
+  }, [subscribers.length]);
+
+  const handleAddSub = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubName.trim()) return;
+    const sub = addSubscriber({
+      code: newSubCode.trim(),
+      name: newSubName.trim(),
+      phone: newSubPhone,
+      address: newSubAddress,
+      stationId: newSubStation || undefined,
+      initialAdvance: parseFloat(newSubAdvance) || 0,
+    });
+    notifySuccess(`Abonné "${sub.name}" (${sub.code}) créé avec succès !`);
+    setNewSubName('');
+  };
 
   // Modale de Déploiement Nouvelle Station (Wizard multi-étapes)
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // État du formulaire de création de station
-  const [stationCode, setStationCode] = useState('KANKAN-01');
-  const [stationName, setStationName] = useState('TotalEnergies Kankan Aéroport');
+  // État du formulaire de création de station (Code Unique auto-attribué)
   const [stationCity, setStationCity] = useState('Kankan');
+  const [stationName, setStationName] = useState('TotalEnergies Kankan Aéroport');
+  const [stationCode, setStationCode] = useState(() => generateStationCode('Kankan'));
+
+  // Synchronisation dynamique du Code Station dès modification de la ville
+  const handleCityChange = (val: string) => {
+    setStationCity(val);
+    setStationCode(generateStationCode(val));
+  };
 
   // Cuves à créer (capacity et initialStock en string pour permettre la saisie libre)
-  const [customTanks, setCustomTanks] = useState<Array<{ code: string; fuelType: 'SUPER' | 'GAZOIL'; capacity: string; initialStock: string }>>([
-    { code: 'CUVE 01 - SUPER', fuelType: 'SUPER', capacity: '45000', initialStock: '10000' },
-    { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '12000' },
+  const [customTanks, setCustomTanks] = useState<Array<{ code: string; fuelType: 'ESSENCE' | 'GAZOIL' | 'SUPER'; capacity: string; initialStock: string }>>([
+    { code: 'CUVE 01 - ESSENCE', fuelType: 'ESSENCE', capacity: '45000', initialStock: '0' },
+    { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '0' },
   ]);
 
   // Pompes à créer (unitPrice en string pour permettre la saisie libre)
-  const [customPumps, setCustomPumps] = useState<Array<{ name: string; fuelType: 'SUPER' | 'GAZOIL'; tankIndex: number; unitPrice: string }>>([
-    { name: 'Pompe 01 (Super)', fuelType: 'SUPER', tankIndex: 0, unitPrice: '12000' },
+  const [customPumps, setCustomPumps] = useState<Array<{ name: string; fuelType: 'ESSENCE' | 'GAZOIL' | 'SUPER'; tankIndex: number; unitPrice: string }>>([
+    { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
     { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
   ]);
 
@@ -79,46 +185,46 @@ export default function StationsPage() {
 
   // Formulaire rapide d'ajout de cuve / pompe dans la station existante
   const [newTankCode, setNewTankCode] = useState('');
-  const [newTankFuel, setNewTankFuel] = useState<'SUPER' | 'GAZOIL'>('SUPER');
+  const [newTankFuel, setNewTankFuel] = useState<'ESSENCE' | 'GAZOIL' | 'SUPER'>('ESSENCE');
   const [newTankCap, setNewTankCap] = useState('45000');
-  const [newTankStock, setNewTankStock] = useState('10000');
+  const [newTankStock, setNewTankStock] = useState('0');
 
   const [newPumpName, setNewPumpName] = useState('');
-  const [newPumpFuel, setNewPumpFuel] = useState<'SUPER' | 'GAZOIL'>('SUPER');
+  const [newPumpFuel, setNewPumpFuel] = useState<'ESSENCE' | 'GAZOIL' | 'SUPER'>('ESSENCE');
   const [newPumpTankId, setNewPumpTankId] = useState('');
 
   // Présélections Cuves
   const applyTankPreset = (preset: '2tanks' | '3tanks' | '4tanks') => {
     if (preset === '2tanks') {
       setCustomTanks([
-        { code: 'CUVE 01 - SUPER', fuelType: 'SUPER', capacity: '45000', initialStock: '10000' },
-        { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '12000' },
+        { code: 'CUVE 01 - ESSENCE', fuelType: 'ESSENCE', capacity: '45000', initialStock: '0' },
+        { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Super)', fuelType: 'SUPER', tankIndex: 0, unitPrice: '12000' },
+        { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
         { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
       ]);
     } else if (preset === '3tanks') {
       setCustomTanks([
-        { code: 'CUVE 01 - SUPER', fuelType: 'SUPER', capacity: '45000', initialStock: '10000' },
-        { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '12000' },
-        { code: 'CUVE 03 - GAZOIL PRO', fuelType: 'GAZOIL', capacity: '50000', initialStock: '15000' },
+        { code: 'CUVE 01 - ESSENCE', fuelType: 'ESSENCE', capacity: '45000', initialStock: '0' },
+        { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '0' },
+        { code: 'CUVE 03 - GAZOIL PRO', fuelType: 'GAZOIL', capacity: '50000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Super)', fuelType: 'SUPER', tankIndex: 0, unitPrice: '12000' },
+        { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
         { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
         { name: 'Pompe 03 (Gazoil Poids Lourds)', fuelType: 'GAZOIL', tankIndex: 2, unitPrice: '12000' },
       ]);
     } else if (preset === '4tanks') {
       setCustomTanks([
-        { code: 'CUVE 01 - SUPER 1', fuelType: 'SUPER', capacity: '45000', initialStock: '10000' },
-        { code: 'CUVE 02 - SUPER 2', fuelType: 'SUPER', capacity: '45000', initialStock: '10000' },
-        { code: 'CUVE 03 - GAZOIL 1', fuelType: 'GAZOIL', capacity: '50000', initialStock: '15000' },
-        { code: 'CUVE 04 - GAZOIL 2', fuelType: 'GAZOIL', capacity: '50000', initialStock: '15000' },
+        { code: 'CUVE 01 - ESSENCE 1', fuelType: 'ESSENCE', capacity: '45000', initialStock: '0' },
+        { code: 'CUVE 02 - ESSENCE 2', fuelType: 'ESSENCE', capacity: '45000', initialStock: '0' },
+        { code: 'CUVE 03 - GAZOIL 1', fuelType: 'GAZOIL', capacity: '50000', initialStock: '0' },
+        { code: 'CUVE 04 - GAZOIL 2', fuelType: 'GAZOIL', capacity: '50000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Super A)', fuelType: 'SUPER', tankIndex: 0, unitPrice: '12000' },
-        { name: 'Pompe 02 (Super B)', fuelType: 'SUPER', tankIndex: 1, unitPrice: '12000' },
+        { name: 'Pompe 01 (Essence A)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
+        { name: 'Pompe 02 (Essence B)', fuelType: 'ESSENCE', tankIndex: 1, unitPrice: '12000' },
         { name: 'Pompe 03 (Gazoil A)', fuelType: 'GAZOIL', tankIndex: 2, unitPrice: '12000' },
         { name: 'Pompe 04 (Gazoil B)', fuelType: 'GAZOIL', tankIndex: 3, unitPrice: '12000' },
       ]);
@@ -128,7 +234,7 @@ export default function StationsPage() {
   // Soumission finale du déploiement
   const handleDeployStation = async () => {
     if (!stationName.trim() || !stationCity.trim()) {
-      alert('Veuillez renseigner le nom et la ville de la station.');
+      notifyError('Veuillez renseigner le nom et la ville de la station.');
       return;
     }
 
@@ -166,45 +272,57 @@ export default function StationsPage() {
       setWizardStep(1);
       setCurrentStation(newSt);
 
-      alert(`✅ Station "${newSt.name}" déployée avec succès avec ${customTanks.length} cuves, ${customPumps.length} pompes et son équipe !`);
+      notifySuccess(`Station "${newSt.name}" déployée avec succès avec ${customTanks.length} cuves et ${customPumps.length} pompes !`);
 
-      // Réinitialiser pour le prochain déploiement
-      setStationCode('ST-' + Math.random().toString(36).substring(2, 6).toUpperCase());
+      // Réinitialiser pour le prochain déploiement avec le code automatique suivant
       setStationName('');
       setStationCity('');
+      setStationCode(generateStationCode(''));
     } catch (e: any) {
       setIsSubmitting(false);
-      alert('Erreur lors du déploiement : ' + (e.message || e.toString()));
+      notifyError('Erreur lors du déploiement : ' + (e.message || e.toString()));
     }
   };
 
-  // Modale de Confirmation de Suppression Définitive
+  // Modale de Confirmation de Suppression Définitive (Station individuelle)
   const [stationToDelete, setStationToDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeletingStation, setIsDeletingStation] = useState<boolean>(false);
 
   // Déclencheur ouverture modale de confirmation
   const promptDeleteStation = (stId: string, stName: string) => {
-    if (stations.length <= 1) {
-      alert("Impossible de supprimer la seule station restante du réseau.");
-      return;
-    }
     setStationToDelete({ id: stId, name: stName });
   };
 
-  // Exécution de la suppression après confirmation dans la modale
+  // Exécution de la suppression d'une station
   const handleConfirmDeleteStation = async () => {
     if (!stationToDelete) return;
     setIsDeletingStation(true);
     try {
       await deleteStation(stationToDelete.id);
+      notifySuccess(`Station "${stationToDelete.name}" supprimée avec succès.`);
       if (selectedStationId === stationToDelete.id) {
         setSelectedStationId(null);
       }
       setStationToDelete(null);
     } catch (e: any) {
-      alert("Erreur lors de la suppression de la station : " + (e.message || e.toString()));
+      notifyError("Erreur lors de la suppression de la station : " + (e.message || e.toString()));
     } finally {
       setIsDeletingStation(false);
+    }
+  };
+
+  // Exécution de la suppression de TOUTES les stations
+  const handleConfirmDeleteAllStations = async () => {
+    setIsDeletingAll(true);
+    try {
+      await deleteAllStations();
+      notifySuccess("Toutes les stations ont été supprimées avec succès.");
+      setSelectedStationId(null);
+      setIsDeleteAllModalOpen(false);
+    } catch (e: any) {
+      notifyError("Erreur lors de la suppression de toutes les stations : " + (e.message || e.toString()));
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -219,16 +337,16 @@ export default function StationsPage() {
           </div>
           <h1 className="text-1xl sm:text-2xl font-black text-white tracking-tight">Réseau National des Stations TotalEnergies</h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-            Déployez de nouvelles stations-services, configurez sur mesure les cuves (Super / Gazoil), les pompes électroniques, les comptes gérants et les équipes de pompistes.
+            Déployez de nouvelles stations-services, configurez sur mesure les cuves (Essence / Gazoil), les pompes électroniques, les comptes gérants et les équipes de pompistes.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setCurrentStation(null)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 transition flex items-center gap-2"
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 transition flex items-center gap-2 cursor-pointer"
           >
-            <span>🌐 Vue Réseau Globale</span>
+            <span>Vue Réseau Globale</span>
           </button>
 
           <button
@@ -236,11 +354,22 @@ export default function StationsPage() {
               setIsWizardOpen(true);
               setWizardStep(1);
             }}
-            className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-950/40 transition flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-950/40 transition flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-slate-950" />
             <span>Déployer une Nouvelle Station</span>
           </button>
+
+          {stations.length > 0 && (
+            <button
+              onClick={() => setIsDeleteAllModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-red-950/60 hover:bg-red-900/80 text-red-400 hover:text-red-300 border border-red-800/60 transition flex items-center gap-2 cursor-pointer shadow-md shadow-red-950/40"
+              title="Supprimer toutes les stations et leurs données associées"
+            >
+              <Trash2 className="w-4 h-4 text-red-400" />
+              <span>Supprimer Toutes les Stations</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -254,7 +383,7 @@ export default function StationsPage() {
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
           <span className="text-[11px] font-bold text-slate-400 uppercase block">Total Cuves Réseau</span>
           <span className="text-2xl font-black text-amber-400 font-mono mt-1 block">{tanks.length}</span>
-          <span className="text-[10px] text-slate-400">{tanks.filter(t => t.fuelType === 'SUPER').length} Super | {tanks.filter(t => t.fuelType === 'GAZOIL').length} Gazoil</span>
+          <span className="text-[10px] text-slate-400">{tanks.filter(t => t.fuelType === 'ESSENCE' || t.fuelType === 'SUPER').length} Essence | {tanks.filter(t => t.fuelType === 'GAZOIL').length} Gazoil</span>
         </div>
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
           <span className="text-[11px] font-bold text-slate-400 uppercase block">Total Pompes Actives</span>
@@ -270,111 +399,152 @@ export default function StationsPage() {
 
       {/* Stations List Grid */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
             <Building2 className="w-5 h-5 text-amber-400" />
             Stations-Services Opérationnelles ({stations.length})
           </h2>
-          <span className="text-xs text-slate-400">Cliquez sur une station pour l'administrer ou la configurer</span>
+          <div className="flex items-center gap-2">
+            {stations.length > 0 && (
+              <button
+                onClick={() => setIsDeleteAllModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/50 border border-red-800/40 transition flex items-center gap-1.5"
+                title="Supprimer toutes les stations d'un coup"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Supprimer Tout ({stations.length})</span>
+              </button>
+            )}
+            <span className="text-xs text-slate-400 hidden md:inline">Cliquez sur une station pour l'administrer ou la configurer</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {stations.map((st) => {
-            const isSelected = currentStation?.id === st.id;
-            const stTanks = tanks.filter(t => t.stationId === st.id);
-            const stPumps = pumps.filter(p => p.stationId === st.id);
-            const stEmployees = employees.filter(e => e.stationId === st.id);
-            const stSubs = subscribers.filter(s => s.stationId === st.id);
-
-            const totalCap = stTanks.reduce((acc, t) => acc + t.capacity, 0);
-            const totalStock = stTanks.reduce((acc, t) => acc + t.currentStock, 0);
-
-            return (
-              <div 
-                key={st.id} 
-                className={`rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between ${
-                  isSelected 
-                    ? 'bg-slate-900 border-red-500 shadow-xl shadow-red-950/40 ring-2 ring-red-500/20' 
-                    : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 shadow-lg'
-                }`}
+        {stations.length === 0 ? (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-8 sm:p-12 text-center shadow-xl">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Aucune Station dans le Réseau</h3>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto mb-6">
+              Toutes les stations ont été supprimées. Vous pouvez déployer une nouvelle station personnalisée dès maintenant ou réinitialiser le réseau avec les stations par défaut.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  setIsWizardOpen(true);
+                  setWizardStep(1);
+                }}
+                className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-950/40 transition flex items-center gap-2 cursor-pointer"
               >
-                {/* Station Card Header */}
-                <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <h3 className="font-extrabold text-base text-white tracking-tight leading-tight">{st.name}</h3>
-                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                        <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" /> 
-                        <span className="font-medium text-slate-300">{st.city}</span>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60 shrink-0">
-                      {st.code}
-                    </span>
-                  </div>
+                <Plus className="w-4 h-4 text-slate-950" />
+                <span>Déployer une Nouvelle Station</span>
+              </button>
+              <button
+                onClick={resetAllData}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-2 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <span>Restaurer les Stations Réseau par Défaut</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {stations.map((st) => {
+              const isSelected = currentStation?.id === st.id;
+              const stTanks = tanks.filter(t => t.stationId === st.id);
+              const stPumps = pumps.filter(p => p.stationId === st.id);
+              const stEmployees = employees.filter(e => e.stationId === st.id);
+              const stSubs = subscribers.filter(s => s.stationId === st.id);
 
-                  {/* Stock Progress Mini Bar */}
-                  <div className="mt-3 pt-3 border-t border-slate-800/60">
-                    <div className="flex justify-between text-[11px] mb-1">
-                      <span className="text-slate-400">Stock Carburants Global :</span>
-                      <span className="font-mono font-bold text-white">
-                        {totalStock.toLocaleString('fr-FR')} / {totalCap.toLocaleString('fr-FR')} L
+              const totalCap = stTanks.reduce((acc, t) => acc + t.capacity, 0);
+              const totalStock = stTanks.reduce((acc, t) => acc + t.currentStock, 0);
+
+              return (
+                <div 
+                  key={st.id} 
+                  className={`rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between ${
+                    isSelected 
+                      ? 'bg-slate-900 border-red-500 shadow-xl shadow-red-950/40 ring-2 ring-red-500/20' 
+                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 shadow-lg'
+                  }`}
+                >
+                  {/* Station Card Header */}
+                  <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <h3 className="font-extrabold text-base text-white tracking-tight leading-tight">{st.name}</h3>
+                        <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                          <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" /> 
+                          <span className="font-medium text-slate-300">{st.city}</span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60 shrink-0">
+                        {st.code}
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full"
-                        style={{ width: `${totalCap > 0 ? Math.min(100, Math.round((totalStock / totalCap) * 100)) : 0}%` }}
-                      />
+
+                    {/* Stock Progress Mini Bar */}
+                    <div className="mt-3 pt-3 border-t border-slate-800/60">
+                      <div className="flex justify-between text-[11px] mb-1">
+                        <span className="text-slate-400">Stock Carburants Global :</span>
+                        <span className="font-mono font-bold text-white">
+                          {totalStock.toLocaleString('fr-FR')} / {totalCap.toLocaleString('fr-FR')} L
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full"
+                          style={{ width: `${totalCap > 0 ? Math.min(100, Math.round((totalStock / totalCap) * 100)) : 0}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Station Metrics Grid */}
-                <div className="p-4 grid grid-cols-4 gap-2 text-center text-xs">
-                  <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
-                    <span className="block font-extrabold text-white font-mono text-sm">{stTanks.length}</span>
-                    <span className="text-[10px] text-slate-400">Cuves</span>
+                  {/* Station Metrics Grid */}
+                  <div className="p-4 grid grid-cols-4 gap-2 text-center text-xs">
+                    <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
+                      <span className="block font-extrabold text-white font-mono text-sm">{stTanks.length}</span>
+                      <span className="text-[10px] text-slate-400">Cuves</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
+                      <span className="block font-extrabold text-white font-mono text-sm">{stPumps.length}</span>
+                      <span className="text-[10px] text-slate-400">Pompes</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
+                      <span className="block font-extrabold text-white font-mono text-sm">{stEmployees.length}</span>
+                      <span className="text-[10px] text-slate-400">Pompistes</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
+                      <span className="block font-extrabold text-white font-mono text-sm">{stSubs.length}</span>
+                      <span className="text-[10px] text-slate-400">Abonnés</span>
+                    </div>
                   </div>
-                  <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
-                    <span className="block font-extrabold text-white font-mono text-sm">{stPumps.length}</span>
-                    <span className="text-[10px] text-slate-400">Pompes</span>
-                  </div>
-                  <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
-                    <span className="block font-extrabold text-white font-mono text-sm">{stEmployees.length}</span>
-                    <span className="text-[10px] text-slate-400">Pompistes</span>
-                  </div>
-                  <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/60">
-                    <span className="block font-extrabold text-white font-mono text-sm">{stSubs.length}</span>
-                    <span className="text-[10px] text-slate-400">Abonnés</span>
-                  </div>
-                </div>
 
-                {/* Station Card Footer Actions */}
-                <div className="p-4 pt-2 bg-slate-950/30 border-t border-slate-800/60 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => setSelectedStationId(st.id)}
-                    className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition flex items-center gap-1.5"
-                    title="Configurer cuves, pompes et personnel"
-                  >
-                    <Settings className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Détails & Config</span>
-                  </button>
-
-                  <div className="flex items-center gap-1.5">
+                  {/* Station Card Footer Actions */}
+                  <div className="p-4 pt-2 bg-slate-950/30 border-t border-slate-800/60 flex items-center justify-between gap-2">
                     <button
-                      onClick={() => setCurrentStation(st)}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                        isSelected 
-                          ? 'bg-red-600 text-white shadow-md shadow-red-950/50' 
-                          : 'bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/40'
-                      }`}
+                      onClick={() => setSelectedStationId(st.id)}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition flex items-center gap-1.5"
+                      title="Configurer cuves, pompes et personnel"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isSelected ? 'Station Active' : 'Activer'}</span>
+                      <Settings className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Détails & Config</span>
                     </button>
 
-                    {stations.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setCurrentStation(st)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                          isSelected 
+                            ? 'bg-red-600 text-white shadow-md shadow-red-950/50' 
+                            : 'bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/40'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isSelected ? 'Station Active' : 'Activer'}</span>
+                      </button>
+
                       <button
                         onClick={() => promptDeleteStation(st.id, st.name)}
                         className="p-2 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-950/30 transition border border-transparent hover:border-red-900/40"
@@ -382,14 +552,434 @@ export default function StationsPage() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* ==================================================================== */}
+      {/* CONSOLE D'ADMINISTRATION : GÉRANTS, POMPISTES & ABONNÉS */}
+      {/* ==================================================================== */}
+      {userRole === 'SUPER_ADMIN' && (
+        <div className="space-y-4">
+          {/* Section Header */}
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">
+              <Users className="w-4 h-4" /> CONSOLE D'ADMINISTRATION RH & CLIENTS
+            </div>
+            <h2 className="text-lg font-extrabold text-white">Gestion du Personnel & des Abonnés</h2>
+            <p className="text-xs text-slate-400 mt-1">Créez des comptes de connexion (Gérants, Chefs de piste, Caissiers), ajoutez des pompistes et enregistrez des abonnés pour n'importe quelle station du réseau.</p>
+          </div>
+
+          {/* Admin Tabs */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setAdminTab('GERANTS')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                adminTab === 'GERANTS'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/50'
+                  : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" /> Gérants & Comptes d'Accès ({users.filter(u => u.role !== 'SUPER_ADMIN').length})
+            </button>
+            <button
+              onClick={() => setAdminTab('POMPISTES')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                adminTab === 'POMPISTES'
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/50'
+                  : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              <HardHat className="w-3.5 h-3.5" /> Pompistes & Équipes ({employees.length})
+            </button>
+            <button
+              onClick={() => setAdminTab('ABONNES')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                adminTab === 'ABONNES'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50'
+                  : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" /> Abonnés & Entreprises ({subscribers.length})
+            </button>
+          </div>
+
+          {/* ── TAB: GÉRANTS & COMPTES ─────────────────────────────────────────── */}
+          {adminTab === 'GERANTS' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Form */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <UserPlus className="w-4 h-4 text-blue-400" /> Créer un Nouveau Compte d'Accès
+                </h3>
+                <form onSubmit={handleAddUser} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Nom Complet :</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="ex: Moussa Touré"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-semibold outline-none focus:border-blue-500"
+                      value={newUserName}
+                      onChange={e => setNewUserName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Adresse Email (identifiant de connexion) :</label>
+                    <input
+                      required
+                      type="email"
+                      placeholder="ex: gerant.moussa@totalenergies.gn"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-blue-300 font-mono outline-none focus:border-blue-500"
+                      value={newUserEmail}
+                      onChange={e => setNewUserEmail(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Mot de Passe :</label>
+                    <input
+                      type="text"
+                      placeholder="Mot de passe"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono outline-none focus:border-blue-500"
+                      value={newUserPassword}
+                      onChange={e => setNewUserPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Rôle :</label>
+                      <select
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-blue-500"
+                        value={newUserRole}
+                        onChange={e => setNewUserRole(e.target.value as UserRole)}
+                      >
+                        <option value="GERANT">Gérant</option>
+                        <option value="CHEF_PISTE">Chef de Piste</option>
+                        <option value="CAISSIER">Caissier</option>
+                        <option value="SUPER_ADMIN"> Vue Réseau GlobaleSuper Admin</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Station Assignée :</label>
+                      <select
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-blue-500"
+                        value={newUserStationId}
+                        onChange={e => setNewUserStationId(e.target.value)}
+                        disabled={newUserRole === 'SUPER_ADMIN'}
+                      >
+                        {stations.map(st => (
+                          <option key={st.id} value={st.id}>{st.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-950/40 transition flex items-center justify-center gap-2 mt-2"
+                  >
+                    <UserPlus className="w-4 h-4" /> Créer le Compte d'Accès
+                  </button>
+                </form>
+              </div>
+
+              {/* List */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <Users className="w-4 h-4 text-blue-400" /> Comptes Existants ({users.length})
+                </h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {users.map(u => {
+                    const st = stations.find(s => s.id === u.stationId);
+                    const roleColors: Record<string, string> = {
+                      SUPER_ADMIN: 'bg-purple-950/60 text-purple-300 border-purple-800/40',
+                      GERANT: 'bg-blue-950/60 text-blue-300 border-blue-800/40',
+                      CHEF_PISTE: 'bg-amber-950/60 text-amber-300 border-amber-800/40',
+                      CAISSIER: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/40',
+                    };
+                    const roleLabels: Record<string, string> = {
+                      SUPER_ADMIN: 'Super Admin',
+                      GERANT: 'Gérant',
+                      CHEF_PISTE: 'Chef de Piste',
+                      CAISSIER: 'Caissier',
+                    };
+                    return (
+                      <div key={u.id} className="flex items-center justify-between gap-2 bg-slate-950/60 border border-slate-800/60 rounded-xl px-3.5 py-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-white">{u.name}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColors[u.role] || ''}`}>
+                              {roleLabels[u.role] || u.role}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">{u.email}</div>
+                          {st && <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{st.name}</div>}
+                        </div>
+                        {u.role !== 'SUPER_ADMIN' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              askConfirm({
+                                title: "Supprimer Compte d'Accès",
+                                message: `Voulez-vous vraiment supprimer le compte d'accès de ${u.name} (${u.role}) ?`,
+                                onConfirm: () => {
+                                  deleteUser(u.id);
+                                  notifySuccess(`Compte de ${u.name} supprimé avec succès.`);
+                                }
+                              });
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition shrink-0"
+                            title="Supprimer ce compte"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {users.length === 0 && <p className="text-xs text-slate-500 text-center py-4">Aucun compte créé</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB: POMPISTES & ÉQUIPES ───────────────────────────────────────── */}
+          {adminTab === 'POMPISTES' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Form */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <HardHat className="w-4 h-4 text-amber-400" /> Ajouter un Pompiste / Employé
+                </h3>
+                <form onSubmit={handleAddEmp} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Nom Complet :</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="ex: Ibrahima Sory Diallo"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-semibold outline-none focus:border-amber-500"
+                      value={newEmpName}
+                      onChange={e => setNewEmpName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Poste :</label>
+                      <select
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-amber-500"
+                        value={newEmpTitle}
+                        onChange={e => setNewEmpTitle(e.target.value)}
+                      >
+                        <option>Pompiste</option>
+                        <option>Chef de Piste</option>
+                        <option>Caissier</option>
+                        <option>Agent de Sécurité</option>
+                        <option>Technicien</option>
+                        <option>Gérant</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Salaire de base (GNF) :</label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white font-mono outline-none focus:border-amber-500"
+                        value={newEmpSalary}
+                        onChange={e => setNewEmpSalary(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Station d'affectation :</label>
+                    <select
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-amber-500"
+                      value={newEmpStation}
+                      onChange={e => setNewEmpStation(e.target.value)}
+                    >
+                      {stations.map(st => (
+                        <option key={st.id} value={st.id}>{st.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl text-xs font-black bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-950/40 transition flex items-center justify-center gap-2 mt-2"
+                  >
+                    <Plus className="w-4 h-4" /> Ajouter à l'Équipe
+                  </button>
+                </form>
+              </div>
+
+              {/* List */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <Users className="w-4 h-4 text-amber-400" /> Effectif du Réseau ({employees.length})
+                </h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {employees.map(emp => {
+                    const st = stations.find(s => s.id === emp.stationId);
+                    return (
+                      <div key={emp.id} className="flex items-center justify-between gap-2 bg-slate-950/60 border border-slate-800/60 rounded-xl px-3.5 py-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-white">{emp.fullName}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-800/40">{emp.jobTitle}</span>
+                          </div>
+                          {st && <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{st.name}</div>}
+                          <div className="text-[11px] text-slate-500 font-mono">{emp.baseSalary.toLocaleString('fr-FR')} GNF / mois</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            askConfirm({
+                              title: "Retirer de l'Effectif",
+                              message: `Voulez-vous retirer ${emp.fullName} (${emp.jobTitle}) de l'effectif ?`,
+                              onConfirm: () => {
+                                deleteEmployee(emp.id);
+                                notifySuccess(`Employé ${emp.fullName} retiré de l'effectif.`);
+                              }
+                            });
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition shrink-0"
+                          title="Retirer cet employé"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {employees.length === 0 && <p className="text-xs text-slate-500 text-center py-4">Aucun employé enregistré</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB: ABONNÉS & ENTREPRISES ─────────────────────────────────────── */}
+          {adminTab === 'ABONNES' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Form */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <CreditCard className="w-4 h-4 text-emerald-400" /> Créer un Nouvel Abonné
+                </h3>
+                <form onSubmit={handleAddSub} className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1 flex items-center justify-between">
+                        <span>Code Client :</span>
+                        <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded-full">Auto-attribué</span>
+                      </label>
+                      <input
+                        required
+                        type="text"
+                        readOnly
+                        className="w-full bg-slate-950/80 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-400 font-mono font-bold outline-none cursor-not-allowed"
+                        value={newSubCode}
+                        title="Code Client auto-attribué par le système"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Téléphone :</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500"
+                        value={newSubPhone}
+                        onChange={e => setNewSubPhone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Raison Sociale / Nom :</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="ex: Société Minière de Guinée"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-semibold outline-none focus:border-emerald-500"
+                      value={newSubName}
+                      onChange={e => setNewSubName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Station :</label>
+                      <select
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-emerald-500"
+                        value={newSubStation}
+                        onChange={e => setNewSubStation(e.target.value)}
+                      >
+                        {stations.map(st => (
+                          <option key={st.id} value={st.id}>{st.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Avance Initiale (GNF) :</label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white font-mono outline-none focus:border-emerald-500"
+                        value={newSubAdvance}
+                        onChange={e => setNewSubAdvance(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-950/40 transition flex items-center justify-center gap-2 mt-2"
+                  >
+                    <Plus className="w-4 h-4" /> Enregistrer l'Abonné
+                  </button>
+                </form>
+              </div>
+
+              {/* List */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-2 mb-4">
+                  <CreditCard className="w-4 h-4 text-emerald-400" /> Abonnés du Réseau ({subscribers.length})
+                </h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {subscribers.map(sub => {
+                    const st = stations.find(s => s.id === sub.stationId);
+                    return (
+                      <div key={sub.id} className="flex items-center justify-between gap-2 bg-slate-950/60 border border-slate-800/60 rounded-xl px-3.5 py-2.5">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold font-mono text-emerald-400">{sub.code}</span>
+                            <span className="text-xs font-bold text-white">{sub.name}</span>
+                          </div>
+                          {st && <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{st.name}</div>}
+                          <div className="text-[11px] text-slate-500">Solde : {(sub.currentAdvance - sub.currentCredit).toLocaleString('fr-FR')} GNF</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            askConfirm({
+                              title: "Supprimer Client Abonné",
+                              message: `Voulez-vous supprimer le compte abonné de ${sub.name} (${sub.code}) ?`,
+                              onConfirm: () => {
+                                deleteSubscriber(sub.id);
+                                notifySuccess(`Abonné ${sub.name} supprimé avec succès.`);
+                              }
+                            });
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition shrink-0"
+                          title="Supprimer cet abonné"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {subscribers.length === 0 && <p className="text-xs text-slate-500 text-center py-4">Aucun abonné enregistré</p>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ==================================================================== */}
       {/* MODAL WIZARD: DÉPLOIEMENT COMPLET NOUVELLE STATION */}
@@ -470,14 +1060,17 @@ export default function StationsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1.5">Code Unique de la Station :</label>
+                    <label className="block text-slate-300 font-bold mb-1.5 flex items-center justify-between">
+                      <span>Code Unique de la Station :</span>
+                      <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 border border-amber-800/60 px-2 py-0.5 rounded-full">Auto-attribué par le système</span>
+                    </label>
                     <input
                       type="text"
                       required
-                      placeholder="ex: KANKAN-01, LABE-CENTRE, KINDIA-02..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-amber-400 font-mono font-bold text-sm outline-none focus:border-amber-500"
+                      readOnly
+                      className="w-full bg-slate-950/80 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-400 font-mono font-bold text-sm outline-none cursor-not-allowed"
                       value={stationCode}
-                      onChange={(e) => setStationCode(e.target.value)}
+                      title="Code Unique de Station généré automatiquement par le système"
                     />
                   </div>
 
@@ -501,7 +1094,7 @@ export default function StationsPage() {
                       placeholder="ex: Kankan, Labé, Kindia, Mamou, Boké, Conakry..."
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-sm outline-none focus:border-amber-500"
                       value={stationCity}
-                      onChange={(e) => setStationCity(e.target.value)}
+                      onChange={(e) => handleCityChange(e.target.value)}
                     />
                   </div>
                 </div>
@@ -581,12 +1174,12 @@ export default function StationsPage() {
                             <select
                               value={tank.fuelType}
                               onChange={(e) => {
-                                const val = e.target.value as 'SUPER' | 'GAZOIL';
+                                const val = e.target.value as 'ESSENCE' | 'GAZOIL';
                                 setCustomTanks(prev => prev.map((t, i) => i === idx ? { ...t, fuelType: val } : t));
                               }}
                               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
                             >
-                              <option value="SUPER" className="bg-slate-900 text-red-400">SUPER (Essence)</option>
+                              <option value="ESSENCE" className="bg-slate-900 text-red-400">ESSENCE</option>
                               <option value="GAZOIL" className="bg-slate-900 text-amber-400">GAZOIL (Diesel)</option>
                             </select>
                           </div>
@@ -744,8 +1337,8 @@ export default function StationsPage() {
                       setCustomPumps(prev => [
                         ...prev, 
                         { 
-                          name: `Pompe 0${prev.length + 1} (${customTanks[0]?.fuelType || 'SUPER'})`, 
-                          fuelType: customTanks[0]?.fuelType || 'SUPER', 
+                          name: `Pompe 0${prev.length + 1} (${customTanks[0]?.fuelType === 'SUPER' ? 'ESSENCE' : (customTanks[0]?.fuelType || 'ESSENCE')})`, 
+                          fuelType: customTanks[0]?.fuelType || 'ESSENCE', 
                           tankIndex: 0, 
                           unitPrice: '12000' 
                         }
@@ -971,7 +1564,7 @@ export default function StationsPage() {
                       <div>
                         <div className="font-bold text-white">{tank.code}</div>
                         <div className="text-[11px] text-slate-400">
-                          Type : <span className={tank.fuelType === 'SUPER' ? 'text-red-400 font-bold' : 'text-amber-400 font-bold'}>{tank.fuelType}</span> | Cap : {tank.capacity.toLocaleString('fr-FR')} L
+                          Type : <span className={(tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE') ? 'text-red-400 font-bold' : 'text-amber-400 font-bold'}>{tank.fuelType === 'SUPER' ? 'ESSENCE' : tank.fuelType}</span> | Cap : {tank.capacity.toLocaleString('fr-FR')} L
                         </div>
                         <div className="text-[11px] text-emerald-400 font-mono font-bold mt-1">
                           Stock Actuel : {tank.currentStock.toLocaleString('fr-FR')} L
@@ -1002,7 +1595,7 @@ export default function StationsPage() {
                     onChange={e => setNewTankFuel(e.target.value as any)}
                     className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white font-bold"
                   >
-                    <option value="SUPER">SUPER</option>
+                    <option value="ESSENCE">ESSENCE</option>
                     <option value="GAZOIL">GAZOIL</option>
                   </select>
                   <input
@@ -1046,7 +1639,7 @@ export default function StationsPage() {
                       <div>
                         <div className="font-bold text-white">{pump.name}</div>
                         <div className="text-[11px] text-slate-400">
-                          Carburant : <span className={pump.fuelType === 'SUPER' ? 'text-red-400 font-bold' : 'text-amber-400 font-bold'}>{pump.fuelType}</span>
+                          Carburant : <span className={(pump.fuelType === 'SUPER' || pump.fuelType === 'ESSENCE') ? 'text-red-400 font-bold' : 'text-amber-400 font-bold'}>{pump.fuelType === 'SUPER' ? 'ESSENCE' : pump.fuelType}</span>
                         </div>
                         <div className="text-[11px] text-amber-400 font-mono font-bold mt-1">
                           Prix : {pump.unitPrice.toLocaleString('fr-FR')} GNF/L
@@ -1251,6 +1844,119 @@ export default function StationsPage() {
                   <>
                     <Trash2 className="w-4 h-4 text-white" />
                     <span>Oui, supprimer définitivement</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODALE DE CONFIRMATION : SUPPRESSION DE TOUTES LES STATIONS */}
+      {/* ==================================================================== */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-red-500/60 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl shadow-red-950/80 animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-red-950/80 to-slate-900 p-5 border-b border-red-900/40 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-base">Supprimer TOUTES les Stations</h3>
+                  <p className="text-xs text-red-300 font-medium">Attention : action irréversible sur l'ensemble du réseau</p>
+                </div>
+              </div>
+              <button
+                onClick={() => !isDeletingAll && setIsDeleteAllModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                disabled={isDeletingAll}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Vous êtes sur le point de supprimer l'intégralité du réseau de stations (<strong>{stations.length} station{stations.length > 1 ? 's' : ''}</strong>).
+              </p>
+
+              {/* Cascade Deletion Summary */}
+              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  Éléments qui seront supprimés en cascade :
+                </span>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                    <span className="block font-black text-white text-sm">{stations.length}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Stations</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                    <span className="block font-black text-white text-sm">{tanks.length}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Cuves</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                    <span className="block font-black text-white text-sm">{pumps.length}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Pompes</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                    <span className="block font-black text-white text-sm">{employees.length}</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Employés</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 pt-1">
+                  Les tournées pompes, stocks carburants, livraisons BL, créances abonnés et historiques de caisse associés seront également vidés.
+                </p>
+              </div>
+
+              {/* Preservation Notice */}
+              <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-3 flex items-start gap-2.5 text-xs text-emerald-300">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Sécurité Super-Admin :</strong> Votre compte administrateur racine reste préservé intact afin que vous puissiez redéployer de nouvelles stations ou restaurer les données à tout moment.
+                </span>
+              </div>
+
+              {/* Warning Notice */}
+              <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 flex items-start gap-2.5 text-xs text-red-300">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Confirmation requise :</strong> Cette suppression définitive prend effet immédiatement sur la base de données et dans votre navigateur.
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="bg-slate-950 p-4 border-t border-slate-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                disabled={isDeletingAll}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition disabled:opacity-50 cursor-pointer"
+              >
+                Annuler
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAllStations}
+                disabled={isDeletingAll}
+                className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-950/60 transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isDeletingAll ? (
+                  <>
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Suppression de tout le réseau...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 text-white" />
+                    <span>Oui, tout supprimer définitivement</span>
                   </>
                 )}
               </button>

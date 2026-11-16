@@ -6,13 +6,15 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Fuel, 
+  Radio,
   PackageCheck, 
   CreditCard, 
   Receipt, 
   Users, 
   Building2,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  BarChart2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,6 +27,8 @@ export default function Sidebar({ userRole, stationName }: SidebarProps) {
 
   const navItems = [
     { href: '/', label: 'Tableau de Bord', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'GERANT', 'CHEF_PISTE', 'CAISSIER'] },
+    { href: '/telematics', label: 'Cuves & Sondes IoT', icon: Radio, roles: ['SUPER_ADMIN', 'GERANT', 'CHEF_PISTE'], badge: 'LIVE' },
+    { href: '/statistiques', label: 'Statistiques & Rapports', icon: BarChart2, roles: ['SUPER_ADMIN', 'GERANT'] },
     { href: '/carburants', label: 'Carburants & Pompes', icon: Fuel, roles: ['SUPER_ADMIN', 'GERANT', 'CHEF_PISTE'] },
     { href: '/abonnes', label: 'Abonnés & Factures', icon: CreditCard, roles: ['SUPER_ADMIN', 'GERANT', 'CAISSIER', 'CHEF_PISTE'] },
     { href: '/caisse', label: 'Caisse & Dépenses', icon: Receipt, roles: ['SUPER_ADMIN', 'GERANT', 'CAISSIER'] },
@@ -77,7 +81,14 @@ export default function Sidebar({ userRole, stationName }: SidebarProps) {
                   <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
-                {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                <div className="flex items-center gap-1.5">
+                  {item.badge && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                  {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                </div>
               </Link>
             );
           })}

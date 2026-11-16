@@ -47,7 +47,7 @@ export default function Dashboard() {
   const filteredEmployees = isGlobal ? employees : employees.filter(e => e.stationId === currentStation.id);
 
   // Calculations
-  const superTank = filteredTanks.find(t => t.fuelType === 'SUPER') || filteredTanks[0];
+  const essenceTank = filteredTanks.find(t => t.fuelType === 'ESSENCE' || t.fuelType === 'SUPER') || filteredTanks[0];
   const gazoilTank = filteredTanks.find(t => t.fuelType === 'GAZOIL') || filteredTanks[1];
 
   const totalFuelLitersSold = filteredShifts.reduce((acc, s) => acc + s.litersSold, 0);
@@ -63,9 +63,9 @@ export default function Dashboard() {
   const netCashBalance = totalCashIn - totalExpensesAmount;
 
   // Tank Stock Totals
-  const totalSuperStock = filteredTanks.filter(t => t.fuelType === 'SUPER').reduce((a, b) => a + b.currentStock, 0);
+  const totalEssenceStock = filteredTanks.filter(t => t.fuelType === 'ESSENCE' || t.fuelType === 'SUPER').reduce((a, b) => a + b.currentStock, 0);
   const totalGazoilStock = filteredTanks.filter(t => t.fuelType === 'GAZOIL').reduce((a, b) => a + b.currentStock, 0);
-  const totalAllFuelStock = totalSuperStock + totalGazoilStock;
+  const totalAllFuelStock = totalEssenceStock + totalGazoilStock;
 
   // Total Gap (Coulage / Pertes)
   const totalGap = filteredTanks.reduce((acc, t) => acc + (t.physicalStock - t.currentStock), 0);
@@ -155,7 +155,7 @@ export default function Dashboard() {
               {totalAllFuelStock.toLocaleString('fr-FR')} <span className="text-xs text-amber-400 font-bold">Litres</span>
             </div>
             <div className="flex items-center justify-between mt-2 text-xs text-slate-400">
-              <span>Super : <strong className="text-white font-bold">{totalSuperStock.toLocaleString('fr-FR')}L</strong></span>
+              <span>Essence : <strong className="text-white font-bold">{totalEssenceStock.toLocaleString('fr-FR')}L</strong></span>
               <span>Gazoil : <strong className="text-white font-bold">{totalGazoilStock.toLocaleString('fr-FR')}L</strong></span>
             </div>
           </div>
@@ -252,13 +252,13 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span className="font-extrabold text-sm text-white">{tank.code}</span>
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">
-                        {tank.fuelType}
+                        {tank.fuelType === 'SUPER' ? 'ESSENCE' : tank.fuelType}
                       </span>
                     </div>
 
                     <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
                       <div 
-                        className={`h-full rounded-full transition-all duration-500 ${tank.fuelType === 'SUPER' ? 'bg-gradient-to-r from-red-600 to-rose-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} 
+                        className={`h-full rounded-full transition-all duration-500 ${(tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE') ? 'bg-gradient-to-r from-red-600 to-rose-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} 
                         style={{ width: `${fillPercentage}%` }}
                       ></div>
                     </div>

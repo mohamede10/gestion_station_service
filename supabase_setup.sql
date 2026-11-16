@@ -295,8 +295,8 @@ INSERT INTO "Tank" ("id", "stationId", "code", "fuelType", "capacity", "initialS
 
 -- 5.4 Pompes distributrices Kissosso (Prêtes pour la saisie des index de départ)
 INSERT INTO "Pump" ("id", "stationId", "tankId", "name", "fuelType") VALUES
-('pump-01', 'stat-kissosso-001', 'tank-super-01', 'Pompe 1 - Super', 'SUPER'),
-('pump-02', 'stat-kissosso-001', 'tank-super-01', 'Pompe 2 - Super', 'SUPER'),
+('pump-01', 'stat-kissosso-001', 'tank-super-01', 'Pompe 1 - Essence', 'SUPER'),
+('pump-02', 'stat-kissosso-001', 'tank-super-01', 'Pompe 2 - Essence', 'SUPER'),
 ('pump-03', 'stat-kissosso-001', 'tank-gazoil-02', 'Pompe 3 - Gazoil', 'GAZOIL'),
 ('pump-04', 'stat-kissosso-001', 'tank-gazoil-02', 'Pompe 4 - Gazoil', 'GAZOIL');
 

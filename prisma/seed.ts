@@ -101,15 +101,15 @@ async function main() {
 
   console.log('✅ 5 Utilisateurs créés avec succès.');
 
-  // 4. Création des Cuves pour Kissosso
+  // 4. Création des Cuves pour Kissosso (Initialisées à 0 L)
   const cuveSuper = await prisma.tank.create({
     data: {
       stationId: kissosso.id,
       code: 'CUVE-01',
       fuelType: FuelType.SUPER,
       capacity: 50000,
-      initialStock: 48000,
-      currentStock: 46700,
+      initialStock: 0,
+      currentStock: 0,
     },
   });
 
@@ -119,12 +119,12 @@ async function main() {
       code: 'CUVE-02',
       fuelType: FuelType.GAZOIL,
       capacity: 60000,
-      initialStock: 55000,
-      currentStock: 53300,
+      initialStock: 0,
+      currentStock: 0,
     },
   });
 
-  console.log('✅ Cuves créées.');
+  console.log('✅ Cuves créées avec stock initial 0 L.');
 
   // 5. Création des Pompes pour Kissosso
   const pompe1 = await prisma.pump.create({
@@ -163,51 +163,9 @@ async function main() {
     },
   });
 
-  console.log('✅ 4 Pompes créées.');
+  console.log('✅ 4 Pompes créées (index de départ 0).');
 
-  // 6. Relevés initiaux des pompes
-  await prisma.pumpReading.createMany({
-    data: [
-      {
-        pumpId: pompe1.id,
-        startIndex: 124500,
-        endIndex: 126200,
-        returnToTank: 0,
-        unitPrice: 12000,
-        totalLiters: 1700,
-        totalAmount: 20400000,
-      },
-      {
-        pumpId: pompe2.id,
-        startIndex: 88400,
-        endIndex: 89750,
-        returnToTank: 0,
-        unitPrice: 12000,
-        totalLiters: 1350,
-        totalAmount: 16200000,
-      },
-      {
-        pumpId: pompe3.id,
-        startIndex: 215300,
-        endIndex: 217100,
-        returnToTank: 0,
-        unitPrice: 12000,
-        totalLiters: 1800,
-        totalAmount: 21600000,
-      },
-      {
-        pumpId: pompe4.id,
-        startIndex: 164100,
-        endIndex: 165200,
-        returnToTank: 0,
-        unitPrice: 12000,
-        totalLiters: 1100,
-        totalAmount: 13200000,
-      },
-    ],
-  });
-
-  // 7. Abonnés & Flottes
+  // 6. Abonnés & Flottes (Soldes vierges à 0 GNF)
   const abonneTopaz = await prisma.subscriber.create({
     data: {
       stationId: kissosso.id,
@@ -215,8 +173,8 @@ async function main() {
       name: 'Topaz Multi-Industries',
       phone: '+224 622 11 22 33',
       address: 'Zone Industrielle Matoto',
-      currentAdvance: 15000000,
-      currentCredit: 34500000,
+      currentAdvance: 0,
+      currentCredit: 0,
     },
   });
 
@@ -227,14 +185,14 @@ async function main() {
       name: 'Guicopres BTP',
       phone: '+224 624 44 55 66',
       address: 'Kagbelen Conakry',
-      currentAdvance: 2500000,
-      currentCredit: 23189000,
+      currentAdvance: 0,
+      currentCredit: 0,
     },
   });
 
-  console.log('✅ Abonnés créés.');
+  console.log('✅ Abonnés créés avec soldes à 0 GNF.');
 
-  // 8. Produits Boutique / Lubrifiants & Gaz
+  // 7. Produits Boutique / Lubrifiants & Gaz (Stocks à 0)
   await prisma.product.createMany({
     data: [
       {
@@ -242,7 +200,7 @@ async function main() {
         code: 'RUBIA-7400-5L',
         name: 'Total Quartz / Rubia TIR 7400 15W40 (5L)',
         unitType: 'BIDON',
-        currentStock: 42,
+        currentStock: 0,
         price: 285000,
       },
       {
@@ -250,7 +208,7 @@ async function main() {
         code: 'QUARTZ-9000-5L',
         name: 'Total Quartz 9000 5W40 Synthétique (5L)',
         unitType: 'BIDON',
-        currentStock: 18,
+        currentStock: 0,
         price: 460000,
       },
       {
@@ -258,7 +216,7 @@ async function main() {
         code: 'GAZ-B6',
         name: 'Bouteille de Gaz TotalGaz 6kg (Recharge)',
         unitType: 'UNITE',
-        currentStock: 65,
+        currentStock: 0,
         price: 65000,
       },
       {
@@ -266,7 +224,7 @@ async function main() {
         code: 'GAZ-B12',
         name: 'Bouteille de Gaz TotalGaz 12.5kg (Recharge)',
         unitType: 'UNITE',
-        currentStock: 48,
+        currentStock: 0,
         price: 130000,
       },
     ],

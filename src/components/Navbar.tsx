@@ -14,7 +14,8 @@ export default function Navbar() {
     userRole,
     resetAllData,
     currentUser,
-    logout
+    logout,
+    askConfirm
   } = useStation();
 
   const [time, setTime] = useState<string>('');
@@ -62,8 +63,8 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 shadow-xl">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 md:px-6 py-3 shadow-xl w-full">
+      <div className="w-full flex items-center justify-between gap-4">
 
         {/* Logo & Brand */}
         <div className="flex items-center gap-3">
@@ -140,9 +141,13 @@ export default function Navbar() {
           {/* Reset Demo Button */}
           <button
             onClick={() => {
-              if (confirm('Voulez-vous réinitialiser les données de démonstration ?')) {
-                resetAllData();
-              }
+              askConfirm({
+                title: '🔄 Réinitialisation des données',
+                message: 'Voulez-vous réinitialiser toutes les données de démonstration ? Cette action remettra tous les stocks, soldes et index à zéro.',
+                confirmLabel: 'Réinitialiser',
+                cancelLabel: 'Annuler',
+                onConfirm: resetAllData
+              });
             }}
             title="Réinitialiser les données de démo"
             className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition"

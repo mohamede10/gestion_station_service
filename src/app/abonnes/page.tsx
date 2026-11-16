@@ -19,11 +19,17 @@ import ReceiptModal, { ReceiptData } from '@/components/ReceiptModal';
 export default function AbonnesPage() {
   const { 
     currentStation, 
+    stations,
+    userRole,
     subscribers, 
     payments, 
     addSubscriber, 
     recordSubscriberPayment, 
-    recordSubscriberVoucher 
+    recordSubscriberVoucher,
+    notifySuccess,
+    notifyError,
+    generateSubscriberCode,
+    generateVoucherNumber
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -42,20 +48,27 @@ export default function AbonnesPage() {
   const [refNoInput, setRefNoInput] = useState<string>('VIR-2026-0906');
   const [notesInput, setNotesInput] = useState<string>('Acompte versement sur compte flotte');
 
-  // Bon Carburant à Crédit Form State
+  // Bon Carburant à Crédit Form State (N° Bon Client généré automatiquement)
   const [voucherSubId, setVoucherSubId] = useState<string>(filteredSubscribers[0]?.id || '');
-  const [fuelType, setFuelType] = useState<'SUPER' | 'GAZOIL'>('GAZOIL');
+  const [fuelType, setFuelType] = useState<'ESSENCE' | 'GAZOIL'>('ESSENCE');
   const [voucherLiters, setVoucherLiters] = useState<string>('100');
   const [voucherPlate, setVoucherPlate] = useState<string>('RC-8812-C');
   const [voucherDriver, setVoucherDriver] = useState<string>('Ibrahima Diallo');
-  const [voucherNumber, setVoucherNumber] = useState<string>('BON-' + Math.floor(1000 + Math.random() * 9000));
+  const [voucherNumber, setVoucherNumber] = useState<string>(generateVoucherNumber());
 
-  // Nouvel Abonné Form State
-  const [newCode, setNewCode] = useState<string>('ABON-00' + (subscribers.length + 1));
+  // Nouvel Abonné Form State (Code Client généré automatiquement)
+  const [newCode, setNewCode] = useState<string>(generateSubscriberCode());
   const [newName, setNewName] = useState<string>('');
   const [newPhone, setNewPhone] = useState<string>('+224 ');
   const [newAddress, setNewAddress] = useState<string>('Conakry');
   const [newInitialAdvance, setNewInitialAdvance] = useState<string>('0');
+  // Sélecteur de station pour le Super Admin
+  const [newSubStation, setNewSubStation] = useState<string>(currentStation?.id || stations[0]?.id || '');
+
+  // Synchronisation dynamique des codes automatiques
+  React.useEffect(() => {
+    setNewCode(generateSubscriberCode());
+  }, [subscribers.length]);
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -79,8 +92,9 @@ export default function AbonnesPage() {
       setReceiptData(receipt);
       setReceiptModalOpen(true);
       setRefNoInput('REF-' + Math.floor(10000 + Math.random() * 90000));
+      notifySuccess(`Versement de ${(parseFloat(amountInput) || 0).toLocaleString('fr-FR')} GNF enregistré avec succès !`);
     } catch (err: any) {
-      alert(err.message || 'Erreur lors du versement');
+      notifyError(err.message || 'Erreur lors du versement');
     }
   };
 
@@ -101,9 +115,10 @@ export default function AbonnesPage() {
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
-      setVoucherNumber('BON-' + Math.floor(1000 + Math.random() * 9000));
+      notifySuccess(`Bon Carburant "${voucherNumber}" validé avec succès (${voucherLiters} L) !`);
+      setVoucherNumber(generateVoucherNumber());
     } catch (err: any) {
-      alert(err.message || 'Erreur lors de l\'enregistrement du bon');
+      notifyError(err.message || 'Erreur lors de l\'enregistrement du bon');
     }
   };
 
@@ -112,18 +127,20 @@ export default function AbonnesPage() {
     e.preventDefault();
     if (!newName.trim()) return;
 
+    const targetStationId = isGlobal ? newSubStation : currentStation?.id;
+
     const sub = addSubscriber({
       code: newCode,
       name: newName,
       phone: newPhone,
       address: newAddress,
+      stationId: targetStationId || undefined,
       initialAdvance: parseFloat(newInitialAdvance) || 0,
       initialCredit: 0
     });
 
-    alert(`Client / Abonné "${sub.name}" enregistré avec succès !`);
+    notifySuccess(`Client / Abonné "${sub.name}" (${sub.code}) enregistré avec succès !`);
     setNewName('');
-    setNewCode('ABON-00' + (subscribers.length + 2));
     setActiveTab('PAYMENT');
   };
 
@@ -146,7 +163,7 @@ export default function AbonnesPage() {
           <div className="flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">
             <CreditCard className="w-4 h-4" /> MODULE ABONNÉS, FLOTTES & FACTURATION
           </div>
-          <h2 className="text-2xl font-black text-white">Gestion des Abonnés & Versements Certifiés</h2>
+          <h1  className="text-2xl font-black text-white">Gestion des Abonnés & Versements Certifiés</h1>
           <p className="text-xs text-slate-400 mt-1">
             Suivi des comptes clients, bons carburant, saisie obligatoire (Nom Déposant + N° Compte) et facturation officielle.
           </p>
@@ -362,7 +379,7 @@ export default function AbonnesPage() {
                     value={fuelType}
                     onChange={(e) => setFuelType(e.target.value as any)}
                   >
-                    <option value="SUPER">SUPER (Essence)</option>
+                    <option value="ESSENCE">ESSENCE</option>
                     <option value="GAZOIL">GAZOIL (Diesel)</option>
                   </select>
                 </div>
@@ -384,13 +401,17 @@ export default function AbonnesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">N° Bon Client :</label>
+                  <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                    <span>N° Bon Client :</span>
+                    <span className="text-[10px] text-blue-400 font-bold bg-blue-950/80 border border-blue-800/60 px-2 py-0.5 rounded-full">Auto-attribué</span>
+                  </label>
                   <input
                     type="text"
                     required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-blue-500"
+                    readOnly
+                    className="w-full bg-slate-950/80 border border-blue-500/30 rounded-xl px-3 py-2 text-blue-400 font-mono font-bold outline-none cursor-not-allowed"
                     value={voucherNumber}
-                    onChange={(e) => setVoucherNumber(e.target.value)}
+                    title="Attribué automatiquement par le système"
                   />
                 </div>
 
@@ -448,15 +469,35 @@ export default function AbonnesPage() {
 
             <form onSubmit={handleCreateSubscriber} className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-400 font-semibold mb-1">Code Client / Réf :</label>
+                <label className="block text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                  <span>Code Client :</span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 border border-amber-800/60 px-2 py-0.5 rounded-full">Attribué automatiquement</span>
+                </label>
                 <input
                   type="text"
                   required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold outline-none focus:border-amber-500"
+                  readOnly
+                  className="w-full bg-slate-950/80 border border-amber-500/30 rounded-xl px-3 py-2 text-amber-400 font-mono font-bold outline-none cursor-not-allowed"
                   value={newCode}
-                  onChange={(e) => setNewCode(e.target.value)}
+                  title="Attribué automatiquement par le système"
                 />
               </div>
+
+              {/* Sélecteur de station pour Super Admin en vue globale */}
+              {isGlobal && userRole === 'SUPER_ADMIN' && (
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Station d'affectation :</label>
+                  <select
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-bold outline-none focus:border-amber-500"
+                    value={newSubStation}
+                    onChange={(e) => setNewSubStation(e.target.value)}
+                  >
+                    {stations.map(st => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Raison Sociale / Nom du Client :</label>
