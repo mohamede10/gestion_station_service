@@ -6,6 +6,8 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 import Sidebar from '@/components/Sidebar';
 import SystemAlertContainer from '@/components/SystemAlertContainer';
+import { PWAInstallPrompt } from '@/components/pwa/PWAInstallPrompt';
+import { PWAUpdatePrompt } from '@/components/pwa/PWAUpdatePrompt';
 import { StationProvider, useStation } from '@/context/StationContext';
 
 function MainLayout({ children }: { children: React.ReactNode }) {
@@ -59,9 +61,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <title>TotalEnergies - Gestion Station-Service (Kissosso)</title>
         <meta name="description" content="Application Web & Mobile de Gestion Intégrée Multi-Stations TotalEnergies" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#dc2626" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="TotalEnergies" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body>
         <StationProvider>
+          <PWAInstallPrompt />
+          <PWAUpdatePrompt />
           <MainLayout>{children}</MainLayout>
         </StationProvider>
       </body>

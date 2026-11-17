@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStation } from '@/context/StationContext';
-import { Building2, ShieldCheck, Clock, LogOut, Sparkles, RotateCcw, ChevronDown } from 'lucide-react';
+import { Building2, ShieldCheck, Clock, LogOut, Sparkles, RotateCcw, ChevronDown, Download } from 'lucide-react';
 
 export default function Navbar() {
   const router = useRouter();
@@ -137,6 +137,24 @@ export default function Navbar() {
               <span className="font-semibold text-white truncate max-w-[160px]">{currentStation.name}</span>
             </div>
           )}
+
+          {/* Install PWA Button */}
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                if (window.triggerPWAInstall) {
+                  window.triggerPWAInstall();
+                } else {
+                  alert("Pour installer l'application directement :\n• Sur Chrome PC/Mac : Cliquez sur l'icône d'installation dans la barre d'adresse en haut à droite (ou menu ⋮ > 'Installer TotalEnergies').\n• Sur Mobile Android : Menu ⋮ > 'Installer l'application'.");
+                }
+              }
+            }}
+            title="Installer l'application PWA"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/30 transition text-xs font-bold cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-red-500" />
+            <span className="hidden md:inline">Installer l'App</span>
+          </button>
 
           {/* Reset Demo Button */}
           <button
