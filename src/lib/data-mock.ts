@@ -1,3 +1,29 @@
+export type InvoiceCategory = 
+  | 'RECEPTION_CITERNE' 
+  | 'VENTE_POMPE' 
+  | 'VENTE_PRODUIT' 
+  | 'BON_LIVRAISON_ABONNE' 
+  | 'PAIEMENT_ABONNE' 
+  | 'SALAIRE_BULLETIN' 
+  | 'DEPENSE' 
+  | 'VERSEMENT_BANCAIRE' 
+  | 'JAUGEAGE_CUVE';
+
+export interface GeneratedInvoiceMock {
+  id: string;
+  stationId: string;
+  category: InvoiceCategory;
+  categoryLabel: string;
+  title: string;
+  docNumber: string;
+  stationName: string;
+  timestamp: string;
+  operatorName: string;
+  amount?: number;
+  fields: { label: string; value: string | number }[];
+  notes?: string;
+}
+
 export interface StationMock {
   id: string;
   code: string;
@@ -418,3 +444,5 @@ export const INITIAL_EMPLOYEES: EmployeeMock[] = [
 export const INITIAL_DELIVERIES: FuelDeliveryMock[] = [];
 
 export const INITIAL_PUMP_SHIFTS: FuelPumpShiftMock[] = [];
+
+export const INITIAL_INVOICES: GeneratedInvoiceMock[] = [];

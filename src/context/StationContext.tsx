@@ -12,6 +12,8 @@ import {
   EmployeeMock, 
   FuelDeliveryMock, 
   FuelPumpShiftMock, 
+  GeneratedInvoiceMock,
+  InvoiceCategory,
   INITIAL_STATIONS, 
   INITIAL_TANKS, 
   INITIAL_PUMPS, 
@@ -22,6 +24,7 @@ import {
   INITIAL_EMPLOYEES, 
   INITIAL_DELIVERIES, 
   INITIAL_PUMP_SHIFTS,
+  INITIAL_INVOICES,
   UserAccountMock,
   INITIAL_USERS,
   FuelType
@@ -129,6 +132,14 @@ interface StationContextType {
   employees: EmployeeMock[];
   deliveries: FuelDeliveryMock[];
   pumpShifts: FuelPumpShiftMock[];
+  invoices: GeneratedInvoiceMock[];
+  addInvoice: (data: {
+    stationId?: string;
+    category: InvoiceCategory;
+    categoryLabel: string;
+    receipt: ReceiptData;
+    amount?: number;
+  }) => GeneratedInvoiceMock;
 
   // Business Actions
   recordPumpShift: (data: {
@@ -289,6 +300,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<EmployeeMock[]>(INITIAL_EMPLOYEES);
   const [deliveries, setDeliveries] = useState<FuelDeliveryMock[]>(INITIAL_DELIVERIES);
   const [pumpShifts, setPumpShifts] = useState<FuelPumpShiftMock[]>(INITIAL_PUMP_SHIFTS);
+  const [invoices, setInvoices] = useState<GeneratedInvoiceMock[]>(INITIAL_INVOICES);
 
   // Alertes & Notifications Système (dans le système, pas dans Chrome)
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
@@ -343,6 +355,34 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       };
     }
   }, []);
+
+  // Ajout / Enregistrement d'une facture / reçu dans l'historique global
+  const addInvoice = (data: {
+    stationId?: string;
+    category: InvoiceCategory;
+    categoryLabel: string;
+    receipt: ReceiptData;
+    amount?: number;
+  }): GeneratedInvoiceMock => {
+    const targetStationId = data.stationId || activeStationId || (currentStation ? currentStation.id : 'stat-kissosso-001');
+    const newInvoice: GeneratedInvoiceMock = {
+      id: `inv-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      stationId: targetStationId,
+      category: data.category,
+      categoryLabel: data.categoryLabel,
+      title: data.receipt.title,
+      docNumber: data.receipt.docNumber,
+      stationName: data.receipt.stationName || activeStationName,
+      timestamp: data.receipt.timestamp || new Date().toISOString().replace('T', ' ').substring(0, 19),
+      operatorName: data.receipt.operatorName || (currentUser?.name || 'Direction'),
+      amount: data.amount,
+      fields: data.receipt.fields,
+      notes: data.receipt.notes
+    };
+
+    setInvoices(prev => [newInvoice, ...prev]);
+    return newInvoice;
+  };
 
   // Générateurs automatiques de codes système
   const generateSubscriberCode = () => {
@@ -418,6 +458,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         if (parsed.expenses) setExpenses(parsed.expenses);
         if (parsed.deliveries) setDeliveries(parsed.deliveries);
         if (parsed.pumpShifts) setPumpShifts(parsed.pumpShifts);
+        if (Array.isArray(parsed.invoices)) setInvoices(parsed.invoices);
       } else {
         setStations(INITIAL_STATIONS);
         setTanks(INITIAL_TANKS);
@@ -553,7 +594,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         expenses,
         employees,
         deliveries,
-        pumpShifts
+        pumpShifts,
+        invoices
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -574,7 +616,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     expenses,
     employees,
     deliveries,
-    pumpShifts
+    pumpShifts,
+    invoices
   ]);
 
   // Auth Methods
@@ -1064,6 +1107,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: 'Saisie enregistrée avec succès. Sortie de cuve déduite en temps réel.'
     };
 
+    addInvoice({
+      stationId: pump.stationId,
+      category: 'VENTE_POMPE',
+      categoryLabel: 'Vente Pompe / Quart',
+      receipt,
+      amount: totalAmount
+    });
+
     return { receipt, shift };
   };
 
@@ -1151,6 +1202,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       ],
       notes: data.notes || 'Déduction télématique et physique exécutée avec succès en direct.'
     };
+
+    addInvoice({
+      stationId: tank.stationId,
+      category: 'VENTE_POMPE',
+      categoryLabel: 'Vente Carburant Live',
+      receipt,
+      amount: totalAmount
+    });
 
     return { receipt, tank: updatedTank, litersSold };
   };
@@ -1263,6 +1322,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: 'Dépotage réceptionné conforme au bon de livraison transporteur.'
     };
 
+    addInvoice({
+      stationId: tank.stationId,
+      category: 'RECEPTION_CITERNE',
+      categoryLabel: 'Réception Citerne / Dépotage',
+      receipt,
+      amount: data.litersDelivered
+    });
+
     return { receipt, delivery };
   };
 
@@ -1366,6 +1433,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: data.notes || 'Versement enregistré avec succès et répercuté sur le compte abonné.'
     };
 
+    addInvoice({
+      stationId: sub.stationId,
+      category: 'PAIEMENT_ABONNE',
+      categoryLabel: 'Paiement / Versement Abonné',
+      receipt,
+      amount: data.amount
+    });
+
     return { receipt, payment };
   };
 
@@ -1434,6 +1509,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: 'Carburant servi sur présentation de bon régulier. Montant porté au compte crédit client.'
     };
 
+    addInvoice({
+      stationId: sub.stationId,
+      category: 'BON_LIVRAISON_ABONNE',
+      categoryLabel: 'Bon Carburant / Crédit Abonné',
+      receipt,
+      amount: totalAmount
+    });
+
     return { receipt, totalAmount };
   };
 
@@ -1494,6 +1577,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: 'Paiement comptant encaissé en caisse boutique.'
     };
 
+    addInvoice({
+      stationId: activeStationId,
+      category: 'VENTE_PRODUIT',
+      categoryLabel: 'Vente Lubrifiant / Gaz',
+      receipt,
+      amount: total
+    });
+
     return { receipt, total };
   };
 
@@ -1539,6 +1630,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       notes: 'Décaissement validé sur pièce justificative par le Chef de Station.'
     };
 
+    addInvoice({
+      stationId: activeStationId,
+      category: 'DEPENSE',
+      categoryLabel: 'Dépense de Caisse',
+      receipt,
+      amount: data.amount
+    });
+
     return { receipt, expense: newExp };
   };
 
@@ -1579,6 +1678,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       ],
       notes: 'Fonds retirés de la caisse station et déposés sur le compte bancaire officiel.'
     };
+
+    addInvoice({
+      stationId: activeStationId,
+      category: 'VERSEMENT_BANCAIRE',
+      categoryLabel: 'Versement Bancaire Recettes',
+      receipt,
+      amount: data.amount
+    });
 
     return { receipt, expense: newExp };
   };
@@ -1645,7 +1752,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
 
     const docNo = `PAIE-${new Date().getFullYear()}-${(new Date().getMonth()+1).toString().padStart(2,'0')}-${Math.floor(100 + Math.random() * 900)}`;
     const periodLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-    return {
+    const slip: ReceiptData = {
       title: 'BULLETIN DE PAIE CERTIFIÉ DE L\'EMPLOYÉ',
       docNumber: docNo,
       stationName: activeStationName,
@@ -1667,6 +1774,16 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         ? `Bulletin arrêté et certifié conforme. ${primeLabel} accordée par la Direction pour ce mois.`
         : 'Bulletin arrêté et certifié conforme aux feuilles de tournées et aux états d\'heures.'
     };
+
+    addInvoice({
+      stationId: emp.stationId,
+      category: 'SALAIRE_BULLETIN',
+      categoryLabel: 'Bulletin de Salaire RH',
+      receipt: slip,
+      amount: net
+    });
+
+    return slip;
   };
 
   // Helper: Reset All Data to defaults (remise à zéro avec données officielles)
@@ -1684,6 +1801,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     setEmployees(INITIAL_EMPLOYEES);
     setDeliveries(INITIAL_DELIVERIES);
     setPumpShifts(INITIAL_PUMP_SHIFTS);
+    setInvoices(INITIAL_INVOICES);
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V5');
@@ -1738,6 +1856,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         employees,
         deliveries,
         pumpShifts,
+        invoices,
+        addInvoice,
         // Actions
         recordPumpShift,
         recordFuelSale,

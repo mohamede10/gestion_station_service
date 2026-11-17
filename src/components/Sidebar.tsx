@@ -14,7 +14,8 @@ import {
   Building2,
   ChevronRight,
   ShieldAlert,
-  BarChart2
+  BarChart2,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,6 +33,7 @@ export default function Sidebar({ userRole, stationName }: SidebarProps) {
     { href: '/carburants', label: 'Carburants & Pompes', icon: Fuel, roles: ['SUPER_ADMIN', 'GERANT', 'CHEF_PISTE'] },
     { href: '/abonnes', label: 'Abonnés & Factures', icon: CreditCard, roles: ['SUPER_ADMIN', 'GERANT', 'CAISSIER', 'CHEF_PISTE'] },
     { href: '/caisse', label: 'Caisse & Dépenses', icon: Receipt, roles: ['SUPER_ADMIN', 'GERANT', 'CAISSIER'] },
+    { href: '/factures', label: 'Historique Factures', icon: FileSpreadsheet, roles: ['SUPER_ADMIN', 'GERANT', 'CAISSIER', 'CHEF_PISTE'], badge: 'DOCS' },
     { href: '/lubrifiants', label: 'Lubrifiants & Gaz', icon: PackageCheck, roles: ['SUPER_ADMIN', 'GERANT', 'CHEF_PISTE'] },
     { href: '/rh-salaires', label: 'RH & Bulletins Paie', icon: Users, roles: ['SUPER_ADMIN', 'GERANT'] },
     { href: '/stations', label: 'Console Multi-Stations', icon: Building2, roles: ['SUPER_ADMIN'] },
