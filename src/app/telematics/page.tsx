@@ -42,8 +42,18 @@ export default function TelematicsPage() {
     notifySuccess,
     notifyError,
     notifyWarning,
-    askConfirm
+    askConfirm,
+    employees
   } = useStation();
+
+  // Pompistes liés à la station active
+  const stationEmployees = currentStation ? employees.filter(e => e.stationId === currentStation.id) : employees;
+  const stationPompistes = stationEmployees.filter(e => 
+    e.jobTitle.toLowerCase().includes('pompiste') || 
+    e.jobTitle.toLowerCase().includes('chef') ||
+    e.jobTitle.toLowerCase().includes('piste')
+  );
+  const availablePompistes = stationPompistes.length > 0 ? stationPompistes : stationEmployees;
 
   // Filtre station (si SUPER_ADMIN, peut choisir 'ALL' ou une station spécifique)
   const isGlobal = !currentStation || userRole === 'SUPER_ADMIN';

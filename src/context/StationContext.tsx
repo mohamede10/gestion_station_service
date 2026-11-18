@@ -279,7 +279,7 @@ interface StationContextType {
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V6';
+const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V7';
 
 export function StationProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false);
@@ -399,9 +399,14 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     return `ART-${String(products.length + 1).padStart(3, '0')}`;
   };
 
-  const generateStationCode = (city?: string) => {
-    const cleanCity = city ? city.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) : 'TOT';
-    return `ST-${cleanCity || 'TOT'}-${String(stations.length + 1).padStart(2, '0')}`;
+  // Code station séquentiel : ST-001, ST-002, ST-003, ...
+  // Le numéro suivant est calculé à partir du plus grand numéro existant.
+  const generateStationCode = (_city?: string) => {
+    const maxNumber = stations.reduce((max, st) => {
+      const match = /^ST-(\d+)$/i.exec((st.code || '').trim());
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `ST-${String(maxNumber + 1).padStart(3, '0')}`;
   };
 
   const generateDeliveryNoteNumber = () => {
@@ -414,7 +419,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     setIsClient(true);
     try {
       // Nettoyage proactif de tous les anciens caches de démonstration
-      ['TOTALENERGIES_STATION_MANAGER_V5', 'TOTALENERGIES_STATION_MANAGER_V4', 'TOTALENERGIES_STATION_MANAGER_V3', 'TOTALENERGIES_STATION_MANAGER_V2', 'TOTALENERGIES_STATION_MANAGER_V1'].forEach(k => {
+      ['TOTALENERGIES_STATION_MANAGER_V6', 'TOTALENERGIES_STATION_MANAGER_V5', 'TOTALENERGIES_STATION_MANAGER_V4', 'TOTALENERGIES_STATION_MANAGER_V3', 'TOTALENERGIES_STATION_MANAGER_V2', 'TOTALENERGIES_STATION_MANAGER_V1'].forEach(k => {
         try { localStorage.removeItem(k); } catch (_) {}
       });
 
@@ -709,7 +714,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   // Helper: Add Station (Complète & Flexible)
   const addStation = async (data: CreateStationInput): Promise<StationMock> => {
     const stationId = `st-${Date.now()}`;
-    const cleanCode = data.code.trim().toUpperCase();
+    const requestedCode = (data.code || '').trim().toUpperCase();
+    const cleanCode = /^ST-\d{3,}$/.test(requestedCode) ? requestedCode : generateStationCode();
     const cleanName = data.name.trim();
     const cleanCity = data.city.trim();
 
@@ -852,13 +858,17 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // Sauvegarde en tâche de fond dans Supabase via API
+    // Sauvegarde dans Supabase via API : la base est la source de vérité
+    let finalStation = newSt;
+    let finalTanks = createdTanks;
+    let finalPumps = createdPumps;
+    let finalEmployees = createdEmployees;
+
     try {
-      fetch('/api/stations', {
+      const res = await fetch('/api/stations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: cleanCode,
           name: cleanName,
           city: cleanCity,
           tanks: data.tanks || createdTanks,
@@ -866,19 +876,77 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           manager: data.manager,
           pompistes: data.pompistes || createdEmployees
         })
-      }).catch(err => console.warn('Sync Supabase station error:', err));
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.success) {
+        throw new Error(payload?.message || 'Synchronisation de la station impossible.');
+      }
+
+      finalStation = {
+        id: payload.station.id,
+        code: payload.station.code,
+        name: payload.station.name,
+        city: payload.station.city
+      };
+
+      if (Array.isArray(payload.tanks) && payload.tanks.length > 0) {
+        finalTanks = payload.tanks.map((t: any) => ({
+          id: t.id,
+          stationId: t.stationId,
+          code: t.code,
+          fuelType: t.fuelType,
+          capacity: t.capacity,
+          initialStock: t.initialStock,
+          currentStock: t.currentStock,
+          physicalStock: t.currentStock,
+          lastDipstickDate: new Date().toISOString().substring(0, 16)
+        }));
+      }
+
+      if (Array.isArray(payload.pumps) && payload.pumps.length > 0) {
+        finalPumps = payload.pumps.map((p: any, i: number) => ({
+          id: p.id,
+          stationId: p.stationId,
+          tankId: p.tankId,
+          name: p.name,
+          fuelType: p.fuelType,
+          startIndex: 0,
+          endIndex: 0,
+          returnToTank: 0,
+          unitPrice: createdPumps[i]?.unitPrice ?? 12000
+        }));
+      }
+
+      if (Array.isArray(payload.employees) && payload.employees.length > 0) {
+        finalEmployees = payload.employees.map((e: any) => ({
+          id: e.id,
+          stationId: e.stationId,
+          fullName: e.fullName,
+          jobTitle: e.jobTitle,
+          baseSalary: e.baseSalary,
+          transportAllowance: e.transportAllowance,
+          livingAllowance: e.livingAllowance,
+          housingAllowance: e.housingAllowance,
+          prime: 0,
+          primeLabel: '',
+          shortages: 0,
+          loans: 0,
+          netSalary: e.baseSalary
+        }));
+      }
     } catch (e) {
-      console.warn('API call error:', e);
+      console.warn('Sync Supabase station error:', e);
     }
 
-    setStations(prev => [...prev, newSt]);
-    setTanks(prev => [...prev, ...createdTanks]);
-    setPumps(prev => [...prev, ...createdPumps]);
-    if (createdEmployees.length > 0) {
-      setEmployees(prev => [...prev, ...createdEmployees]);
+    setStations(prev => [...prev, finalStation]);
+    setTanks(prev => [...prev, ...finalTanks]);
+    setPumps(prev => [...prev, ...finalPumps]);
+    if (finalEmployees.length > 0) {
+      setEmployees(prev => [...prev, ...finalEmployees]);
     }
 
-    return newSt;
+    return finalStation;
   };
 
   const addTankToStation = (stationId: string, data: { code: string; fuelType: FuelType; capacity: number; initialStock: number }): TankMock => {
@@ -1804,6 +1872,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     setInvoices(INITIAL_INVOICES);
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V6');
       localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V5');
       localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V4');
       localStorage.removeItem('TOTALENERGIES_STATION_MANAGER_V3');

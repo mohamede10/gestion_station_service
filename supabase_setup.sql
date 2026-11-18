@@ -275,37 +275,20 @@ CREATE TABLE "CertifiedDocument" (
 -- ====================================================================
 
 -- 5.1 Stations Réseau
-INSERT INTO "Station" ("id", "code", "name", "city") VALUES
-('stat-kissosso-001', 'KISSOSSO', 'TotalEnergies Kissosso', 'Conakry'),
-('stat-matoto-002', 'MATOTO', 'TotalEnergies Matoto', 'Conakry'),
-('stat-bellevue-003', 'BELLEVUE', 'TotalEnergies Belle-Vue', 'Conakry');
+-- AUCUNE STATION PAR DÉFAUT.
+-- Les stations sont créées uniquement depuis l'application (page "Stations-Services")
+-- avec un code généré automatiquement au format ST-001, ST-002, ST-003, ...
 
--- 5.2 Comptes d'accès Utilisateurs (Mot de passe par défaut : admin)
+-- 5.2 Compte Super Admin (indispensable pour la première connexion)
+-- Compte unique conservé : il n'est rattaché à aucune station (stationId = NULL).
 INSERT INTO "User" ("id", "stationId", "username", "passwordHash", "fullName", "role") VALUES
-('usr-superadmin', NULL, 'superadmin@totalenergies.gn', 'admin', 'M. CAMARA (Directeur Général)', 'SUPER_ADMIN'),
-('usr-gerant-kissosso', 'stat-kissosso-001', 'gerant.kissosso@totalenergies.gn', 'admin', 'Sidiki Souaré (Gérant)', 'GERANT'),
-('usr-chefpiste-kissosso', 'stat-kissosso-001', 'chefpiste.kissosso@totalenergies.gn', 'admin', 'Mamadou Baïlo (Chef de Piste)', 'CHEF_PISTE'),
-('usr-caissier-kissosso', 'stat-kissosso-001', 'caissier.kissosso@totalenergies.gn', 'admin', 'Aïssatou Camara (Caissière)', 'CAISSIER'),
-('usr-gerant-matoto', 'stat-matoto-002', 'gerant.matoto@totalenergies.gn', 'admin', 'Ibrahima Sory Touré (Gérant Matoto)', 'GERANT');
+('usr-superadmin', NULL, 'superadmin@totalenergies.gn', 'admin', 'M. CAMARA (Directeur Général)', 'SUPER_ADMIN')
+ON CONFLICT ("username") DO NOTHING;
 
--- 5.3 Cuves de carburant Kissosso (Capacité configurée, Stock initial = 0 L)
-INSERT INTO "Tank" ("id", "stationId", "code", "fuelType", "capacity", "initialStock", "currentStock") VALUES
-('tank-super-01', 'stat-kissosso-001', 'CUVE-01', 'SUPER', 50000, 0, 0),
-('tank-gazoil-02', 'stat-kissosso-001', 'CUVE-02', 'GAZOIL', 60000, 0, 0);
-
--- 5.4 Pompes distributrices Kissosso (Prêtes pour la saisie des index de départ)
-INSERT INTO "Pump" ("id", "stationId", "tankId", "name", "fuelType") VALUES
-('pump-01', 'stat-kissosso-001', 'tank-super-01', 'Pompe 1 - Essence', 'SUPER'),
-('pump-02', 'stat-kissosso-001', 'tank-super-01', 'Pompe 2 - Essence', 'SUPER'),
-('pump-03', 'stat-kissosso-001', 'tank-gazoil-02', 'Pompe 3 - Gazoil', 'GAZOIL'),
-('pump-04', 'stat-kissosso-001', 'tank-gazoil-02', 'Pompe 4 - Gazoil', 'GAZOIL');
-
--- 5.5 Références Produits Boutique & Lubrifiants (Stocks initiaux = 0)
-INSERT INTO "Product" ("id", "stationId", "code", "name", "unitType", "currentStock", "price") VALUES
-('prod-01', 'stat-kissosso-001', 'RUBIA-7400-5L', 'Total Quartz / Rubia TIR 7400 15W40 (5L)', 'BIDON', 0, 285000),
-('prod-02', 'stat-kissosso-001', 'QUARTZ-9000-5L', 'Total Quartz 9000 5W40 Synthétique (5L)', 'BIDON', 0, 460000),
-('prod-03', 'stat-kissosso-001', 'GAZ-B6', 'Bouteille de Gaz TotalGaz 6kg (Recharge)', 'UNITE', 0, 65000),
-('prod-04', 'stat-kissosso-001', 'GAZ-B12', 'Bouteille de Gaz TotalGaz 12.5kg (Recharge)', 'UNITE', 0, 130000);
+-- 5.3 à 5.5
+-- Aucune cuve, pompe, produit, abonné ou employé par défaut.
+-- Toute la structure (cuves, pompes, produits, personnel) est créée
+-- avec la station depuis l'application, avec des stocks à 0.
 
 -- ====================================================================
 -- FIN DU SCRIPT : LA BASE DE DONNÉES EST TOTALEMENT VIERGE DE TRANSACTIONS !

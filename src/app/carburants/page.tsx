@@ -32,7 +32,8 @@ export default function CarburantsPage() {
     recordFuelDelivery,
     notifySuccess,
     notifyError,
-    generateDeliveryNoteNumber
+    generateDeliveryNoteNumber,
+    employees
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -40,6 +41,14 @@ export default function CarburantsPage() {
   const filteredPumps = isGlobal ? pumps : pumps.filter(p => p.stationId === currentStation.id);
   const filteredDeliveries = isGlobal ? deliveries : deliveries.filter(d => d.stationId === currentStation.id);
   const filteredShifts = isGlobal ? pumpShifts : pumpShifts.filter(s => s.stationId === currentStation.id);
+  const stationEmployees = isGlobal ? employees : employees.filter(e => e.stationId === currentStation.id);
+  // Pompistes de la station sélectionnée (ou tous les employés de la station si aucun avec le titre exact)
+  const stationPompistes = stationEmployees.filter(e => 
+    e.jobTitle.toLowerCase().includes('pompiste') || 
+    e.jobTitle.toLowerCase().includes('chef') ||
+    e.jobTitle.toLowerCase().includes('piste')
+  );
+  const availablePompistes = stationPompistes.length > 0 ? stationPompistes : stationEmployees;
 
   // Active Tab: 'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'HISTORY'
   const [activeTab, setActiveTab] = useState<'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'HISTORY'>('SHIFT');
@@ -65,6 +74,17 @@ export default function CarburantsPage() {
   const [supplier, setSupplier] = useState<string>('TotalEnergies Guinée - Dépôt Coronthie');
   const [litersDelivered, setLitersDelivered] = useState<string>('20000');
   const [deliveryOperator, setDeliveryOperator] = useState<string>('Sidiki Souaré (CDS)');
+
+  // Synchronisation dynamique du pompiste responsable avec la liste de la station
+  React.useEffect(() => {
+    if (availablePompistes.length > 0) {
+      // Si le nom actuel n'est pas dans la liste des pompistes disponibles, on prend le premier
+      const exists = availablePompistes.some(p => p.fullName === pompisteName);
+      if (!exists) {
+        setPompisteName(availablePompistes[0].fullName);
+      }
+    }
+  }, [availablePompistes, pompisteName]);
 
   // Synchronisation dynamique du N° de BL
   React.useEffect(() => {
@@ -311,13 +331,29 @@ export default function CarburantsPage() {
 
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Pompiste Responsable :</label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500"
-                    value={pompisteName}
-                    onChange={(e) => setPompisteName(e.target.value)}
-                  />
+                  {availablePompistes.length > 0 ? (
+                    <select
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold outline-none focus:border-red-500 cursor-pointer"
+                      value={pompisteName}
+                      onChange={(e) => setPompisteName(e.target.value)}
+                    >
+                      {availablePompistes.map((emp) => (
+                        <option key={emp.id} value={emp.fullName}>
+                          {emp.fullName} ({emp.jobTitle})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nom du pompiste"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-red-500"
+                      value={pompisteName}
+                      onChange={(e) => setPompisteName(e.target.value)}
+                    />
+                  )}
                 </div>
               </div>
 

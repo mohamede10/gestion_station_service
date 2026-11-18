@@ -147,14 +147,20 @@ export default function StationsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // État du formulaire de création de station (Code Unique auto-attribué)
-  const [stationCity, setStationCity] = useState('Kankan');
-  const [stationName, setStationName] = useState('TotalEnergies Kankan Aéroport');
-  const [stationCode, setStationCode] = useState(() => generateStationCode('Kankan'));
+  const [stationCity, setStationCity] = useState('');
+  const [stationName, setStationName] = useState('');
+  const [stationCode, setStationCode] = useState(() => generateStationCode());
 
-  // Synchronisation dynamique du Code Station dès modification de la ville
+  // Le code station est séquentiel (ST-001, ST-002, ...) et ne dépend pas de la ville
   const handleCityChange = (val: string) => {
     setStationCity(val);
-    setStationCode(generateStationCode(val));
+  };
+
+  // Ouvre le formulaire en recalculant le prochain code station
+  const openWizard = () => {
+    setStationCode(generateStationCode());
+    setIsWizardOpen(true);
+    setWizardStep(1);
   };
 
   // Cuves à créer (capacity et initialStock en string pour permettre la saisie libre)
@@ -274,10 +280,10 @@ export default function StationsPage() {
 
       notifySuccess(`Station "${newSt.name}" déployée avec succès avec ${customTanks.length} cuves et ${customPumps.length} pompes !`);
 
-      // Réinitialiser pour le prochain déploiement avec le code automatique suivant
+      // Réinitialiser : le prochain code sera recalculé à l'ouverture du formulaire
       setStationName('');
       setStationCity('');
-      setStationCode(generateStationCode(''));
+      setStationCode('');
     } catch (e: any) {
       setIsSubmitting(false);
       notifyError('Erreur lors du déploiement : ' + (e.message || e.toString()));
@@ -350,10 +356,7 @@ export default function StationsPage() {
           </button>
 
           <button
-            onClick={() => {
-              setIsWizardOpen(true);
-              setWizardStep(1);
-            }}
+            onClick={openWizard}
             className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-950/40 transition flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-slate-950" />
@@ -430,10 +433,7 @@ export default function StationsPage() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <button
-                onClick={() => {
-                  setIsWizardOpen(true);
-                  setWizardStep(1);
-                }}
+                onClick={openWizard}
                 className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-lg shadow-amber-950/40 transition flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4 text-slate-950" />
