@@ -27,7 +27,10 @@ import {
   INITIAL_INVOICES,
   UserAccountMock,
   INITIAL_USERS,
-  FuelType
+  FuelType,
+  NozzleKey,
+  PumpNozzleMock,
+  createNozzle
 } from '@/lib/data-mock';
 import { ReceiptData } from '@/components/ReceiptModal';
 
@@ -43,9 +46,13 @@ export interface CreateStationInput {
     capacity: number;
     initialStock: number;
   }[];
+  // Chaque pompe possède deux pistolets indépendants (carburant, cuve, prix, index).
   pumps?: {
     name?: string;
-    fuelType: FuelType;
+    pistolet1?: { fuelType: FuelType; tankIndex?: number; tankId?: string; unitPrice?: number };
+    pistolet2?: { fuelType: FuelType; tankIndex?: number; tankId?: string; unitPrice?: number };
+    // Champs historiques acceptés pour compatibilité.
+    fuelType?: FuelType;
     tankIndex?: number;
     tankId?: string;
     unitPrice?: number;
@@ -58,6 +65,8 @@ export interface CreateStationInput {
   pompistes?: {
     fullName: string;
     baseSalary?: number;
+    prime?: number;
+    primeLabel?: string;
   }[];
 }
 
@@ -97,7 +106,17 @@ interface StationContextType {
   // Station Management
   addStation: (data: CreateStationInput) => Promise<StationMock>;
   addTankToStation: (stationId: string, data: { code: string; fuelType: FuelType; capacity: number; initialStock: number }) => TankMock;
-  addPumpToStation: (stationId: string, data: { name: string; fuelType: FuelType; tankId: string; unitPrice?: number }) => PumpMock;
+  addPumpToStation: (stationId: string, data: {
+    name: string;
+    pistolet1?: { fuelType: FuelType; tankId: string; unitPrice?: number };
+    pistolet2?: { fuelType: FuelType; tankId: string; unitPrice?: number };
+    // Compatibilité avec l'ancien formulaire à un seul pistolet.
+    fuelType?: FuelType;
+    tankId?: string;
+    unitPrice?: number;
+  }) => PumpMock;
+  switchTankValve: (tankId: string) => void;
+  updateTankPumpLinks: (tankId: string, pumpIds: string[]) => void;
   deleteStation: (stationId: string) => Promise<boolean>;
   deleteAllStations: () => Promise<boolean>;
   deleteTank: (tankId: string) => void;
@@ -144,11 +163,16 @@ interface StationContextType {
   // Business Actions
   recordPumpShift: (data: {
     pumpId: string;
+    nozzleKey: NozzleKey;
     startIndex: number;
     endIndex: number;
     returnToTank: number;
     pompisteName: string;
     shiftType: 'MATIN' | 'SOIR' | 'NUIT';
+    // Crédit abonné pendant la tournée.
+    subscriberMode: 'NONE' | 'EXISTING' | 'NEW';
+    subscriberId?: string;
+    newSubscriber?: { name: string; phone: string; address: string; initialAdvance?: number };
   }) => { receipt: ReceiptData; shift: FuelPumpShiftMock };
 
   recordTankDipstick: (data: {
@@ -184,6 +208,7 @@ interface StationContextType {
     stationId?: string;
     initialAdvance?: number;
     initialCredit?: number;
+    creditLiters?: number;
   }) => SubscriberMock;
 
   recordSubscriberPayment: (data: {
@@ -246,6 +271,8 @@ interface StationContextType {
     transportAllowance: number;
     livingAllowance: number;
     housingAllowance: number;
+    prime?: number;
+    primeLabel?: string;
   }) => EmployeeMock;
 
   updateEmployee: (
@@ -253,7 +280,7 @@ interface StationContextType {
     updates: Partial<Pick<EmployeeMock, 'shortages' | 'loans' | 'prime' | 'primeLabel' | 'baseSalary' | 'transportAllowance' | 'livingAllowance' | 'housingAllowance'>>
   ) => void;
 
-  generateEmployeePayslip: (empId: string, overridePrime?: number, overridePrimeLabel?: string) => ReceiptData | null;
+  generateEmployeePayslip: (empId: string) => ReceiptData | null;
 
   resetAllData: () => void;
 
@@ -280,6 +307,68 @@ interface StationContextType {
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'TOTALENERGIES_STATION_MANAGER_V7';
+
+// Groupe de bascule : Essence (SUPER/ESSENCE) et Gazoil partagent un point de
+// rencontre distinct. Plusieurs cuves d'un même groupe peuvent alimenter
+// toutes les pompes du groupe.
+export function fuelBasculeGroup(fuelType: FuelType): string {
+  return fuelType === 'GAZOIL' ? 'GAZOIL' : 'ESSENCE';
+}
+
+function resolveTankId(
+  spec: { fuelType?: FuelType; tankIndex?: number; tankId?: string } | undefined,
+  createdTanks: TankMock[],
+  fallbackFuelType: FuelType
+): string {
+  if (spec?.tankIndex !== undefined && createdTanks[spec.tankIndex]) {
+    return createdTanks[spec.tankIndex].id;
+  }
+  if (spec?.tankId && createdTanks.some((t) => t.id === spec.tankId)) {
+    return spec.tankId;
+  }
+  if (spec?.fuelType) {
+    const match = createdTanks.find((t) => fuelBasculeGroup(t.fuelType) === fuelBasculeGroup(spec.fuelType!));
+    if (match) return match.id;
+  }
+  const fallback = createdTanks.find((t) => fuelBasculeGroup(t.fuelType) === fuelBasculeGroup(fallbackFuelType));
+  return fallback?.id || createdTanks[0]?.id || '';
+}
+
+function resolveNozzleSpec(
+  spec: { fuelType: FuelType; tankIndex?: number; tankId?: string; unitPrice?: number } | undefined,
+  legacy: { fuelType?: FuelType; tankIndex?: number; tankId?: string; unitPrice?: number },
+  createdTanks: TankMock[],
+  fallbackFuelType: FuelType
+): { fuelType: FuelType; tankId: string; unitPrice: number } {
+  const fuelType = spec?.fuelType || legacy.fuelType || fallbackFuelType;
+  return {
+    fuelType,
+    tankId: resolveTankId(spec || legacy, createdTanks, fuelType),
+    unitPrice: Number(spec?.unitPrice ?? legacy.unitPrice) || 12000
+  };
+}
+
+function pumpFromSpecs(
+  id: string,
+  stationId: string,
+  name: string,
+  nozzle1: { fuelType: FuelType; tankId: string; unitPrice: number },
+  nozzle2: { fuelType: FuelType; tankId: string; unitPrice: number }
+): PumpMock {
+  return {
+    id,
+    stationId,
+    tankId: nozzle1.tankId,
+    name,
+    fuelType: nozzle1.fuelType,
+    startIndex: 0,
+    endIndex: 0,
+    returnToTank: 0,
+    unitPrice: nozzle1.unitPrice,
+    nozzle1: createNozzle(nozzle1.fuelType, nozzle1.tankId, nozzle1.unitPrice),
+    nozzle2: createNozzle(nozzle2.fuelType, nozzle2.tankId, nozzle2.unitPrice)
+  };
+}
 
 export function StationProvider({ children }: { children: React.ReactNode }) {
   const [isClient, setIsClient] = useState(false);
@@ -435,17 +524,27 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         }
         if (parsed.currentStation !== undefined) setCurrentStation(parsed.currentStation);
         if (Array.isArray(parsed.tanks)) {
-          setTanks(parsed.tanks);
+          // Migration douce des anciens caches : nouveaux champs par défaut.
+          setTanks(parsed.tanks.map((t: any) => ({
+            ...t,
+            valveStatus: t.valveStatus || 'CLOSED',
+            basculeGroup: t.basculeGroup || fuelBasculeGroup(t.fuelType),
+            suppliesPumpIds: Array.isArray(t.suppliesPumpIds) ? t.suppliesPumpIds : []
+          })));
         } else {
           setTanks(INITIAL_TANKS);
         }
         if (Array.isArray(parsed.pumps)) {
-          setPumps(parsed.pumps);
+          setPumps(parsed.pumps.map((p: any) => ({
+            ...p,
+            nozzle1: p.nozzle1 || createNozzle(p.fuelType || 'ESSENCE', p.tankId || '', p.unitPrice || 12000),
+            nozzle2: p.nozzle2 || createNozzle(p.fuelType === 'GAZOIL' ? 'ESSENCE' : 'GAZOIL', p.tankId || '', p.unitPrice || 12000)
+          })));
         } else {
           setPumps(INITIAL_PUMPS);
         }
         if (Array.isArray(parsed.subscribers)) {
-          setSubscribers(parsed.subscribers);
+          setSubscribers(parsed.subscribers.map((s: any) => ({ ...s, creditLiters: s.creditLiters || 0 })));
         } else {
           setSubscribers(INITIAL_SUBSCRIBERS);
         }
@@ -455,7 +554,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           setProducts(INITIAL_PRODUCTS);
         }
         if (Array.isArray(parsed.employees)) {
-          setEmployees(parsed.employees);
+          setEmployees(parsed.employees.map((e: any) => ({
+            ...e,
+            prime: Number(e.prime) || 0,
+            primeLabel: e.primeLabel || ''
+          })));
         } else {
           setEmployees(INITIAL_EMPLOYEES);
         }
@@ -518,23 +621,31 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
                 // On garde le stock BD uniquement si > 0, sinon on laisse le localStorage gérer
                 currentStock: t.currentStock,
                 physicalStock: t.currentStock,
-                lastDipstickDate: new Date().toISOString().substring(0, 16)
+                lastDipstickDate: new Date().toISOString().substring(0, 16),
+                valveStatus: t.valveStatus || 'CLOSED',
+                basculeGroup: t.basculeGroup || fuelBasculeGroup(t.fuelType),
+                suppliesPumpIds: Array.isArray(t.suppliesPumpIds) ? t.suppliesPumpIds : []
               });
             });
           }
           if (st.pumps) {
             st.pumps.forEach((p: any) => {
-              dbPumps.push({
-                id: p.id,
-                stationId: p.stationId,
-                tankId: p.tankId,
-                name: p.name,
-                fuelType: p.fuelType,
-                startIndex: 0,
-                endIndex: 0,
-                returnToTank: 0,
-                unitPrice: 12000
-              });
+              const stationTanks: TankMock[] = st.tanks || [];
+              const n1Spec = resolveNozzleSpec(p.pistolet1, p, stationTanks, p.fuelType || 'ESSENCE');
+              const alternate = stationTanks.find((t) => fuelBasculeGroup(t.fuelType) !== fuelBasculeGroup(n1Spec.fuelType));
+              const n2Spec = resolveNozzleSpec(
+                p.pistolet2,
+                { fuelType: alternate?.fuelType || n1Spec.fuelType, tankId: alternate?.id || n1Spec.tankId, unitPrice: n1Spec.unitPrice },
+                stationTanks,
+                alternate?.fuelType || n1Spec.fuelType
+              );
+              dbPumps.push(pumpFromSpecs(
+                p.id,
+                p.stationId,
+                p.name,
+                n1Spec,
+                n2Spec
+              ));
             });
           }
           if (st.employees) {
@@ -548,11 +659,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
                 transportAllowance: e.transportAllowance,
                 livingAllowance: e.livingAllowance,
                 housingAllowance: e.housingAllowance,
-                prime: 0,
-                primeLabel: '',
+                prime: Number(e.prime) || 0,
+                primeLabel: e.primeLabel || '',
                 shortages: 0,
                 loans: 0,
-                netSalary: e.baseSalary
+                netSalary: (Number(e.baseSalary) || 0) + (Number(e.prime) || 0)
               });
             });
           }
@@ -734,25 +845,36 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       city: cleanCity
     };
 
-    // 1. Cuves personnalisées
+    // 1. Cuves personnalisées (la première cuve de chaque groupe ouvre sa vanne)
     const createdTanks: TankMock[] = [];
+    const pushTank = (tank: Omit<TankMock, 'valveStatus' | 'basculeGroup' | 'suppliesPumpIds'>) => {
+      const group = fuelBasculeGroup(tank.fuelType);
+      createdTanks.push({
+        ...tank,
+        valveStatus: createdTanks.some((t) => fuelBasculeGroup(t.fuelType) === group) ? 'CLOSED' : 'OPEN',
+        basculeGroup: group,
+        suppliesPumpIds: []
+      });
+    };
+
     if (data.tanks && data.tanks.length > 0) {
       data.tanks.forEach((t, i) => {
-        createdTanks.push({
+        const initialStock = Number(t.initialStock) || 0;
+        pushTank({
           id: `tk-${stationId}-${i + 1}`,
           stationId: stationId,
           code: t.code || `CUVE 0${i + 1} - ${t.fuelType}`,
           fuelType: t.fuelType,
           capacity: Number(t.capacity) || 45000,
-          initialStock: Number(t.initialStock) || 0,
-          currentStock: Number(t.initialStock) || 0,
-          physicalStock: Number(t.initialStock) || 0,
+          initialStock,
+          currentStock: initialStock,
+          physicalStock: initialStock,
           lastDipstickDate: new Date().toISOString().substring(0, 16)
         });
       });
     } else {
       // Cuves standard par défaut
-      createdTanks.push({
+      pushTank({
         id: `tk-essence-${stationId}`,
         stationId: stationId,
         code: 'CUVE 01 - ESSENCE',
@@ -763,7 +885,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         physicalStock: 10000,
         lastDipstickDate: new Date().toISOString().substring(0, 16)
       });
-      createdTanks.push({
+      pushTank({
         id: `tk-gazoil-${stationId}`,
         stationId: stationId,
         code: 'CUVE 02 - GAZOIL',
@@ -776,57 +898,51 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // 2. Pompes personnalisées
+    // 2. Pompes à deux pistolets (index indépendants)
     const createdPumps: PumpMock[] = [];
     if (data.pumps && data.pumps.length > 0) {
       data.pumps.forEach((p, i) => {
-        let assignedTankId = createdTanks[0]?.id;
-        if (p.tankIndex !== undefined && createdTanks[p.tankIndex]) {
-          assignedTankId = createdTanks[p.tankIndex].id;
-        } else if (p.tankId) {
-          assignedTankId = p.tankId;
-        } else if (p.fuelType) {
-          const match = createdTanks.find(t => t.fuelType === p.fuelType);
-          if (match) assignedTankId = match.id;
-        }
+        const legacyFuel = p.fuelType || 'ESSENCE';
+        const s1 = resolveNozzleSpec(p.pistolet1, p, createdTanks, legacyFuel);
+        const otherGroup = fuelBasculeGroup(s1.fuelType) === 'GAZOIL' ? 'ESSENCE' : 'GAZOIL';
+        const fallbackTank2 = createdTanks.find((t) => fuelBasculeGroup(t.fuelType) === otherGroup);
+        const defaultNozzle2 = {
+          fuelType: (fallbackTank2?.fuelType || s1.fuelType) as FuelType,
+          tankIndex: fallbackTank2 ? createdTanks.indexOf(fallbackTank2) : createdTanks.indexOf(createdTanks.find((t) => t.id === s1.tankId)!),
+          unitPrice: s1.unitPrice
+        };
+        const s2 = resolveNozzleSpec(p.pistolet2, { ...defaultNozzle2 }, createdTanks, defaultNozzle2.fuelType);
 
-        createdPumps.push({
-          id: `p-${stationId}-${i + 1}`,
-          stationId: stationId,
-          tankId: assignedTankId,
-          name: p.name || `Pompe 0${i + 1} (${p.fuelType === 'ESSENCE' || p.fuelType === 'SUPER' ? 'Essence' : 'Gazoil'})`,
-          fuelType: p.fuelType,
-          startIndex: 0,
-          endIndex: 0,
-          returnToTank: 0,
-          unitPrice: Number(p.unitPrice) || 12000
-        });
+        createdPumps.push(pumpFromSpecs(
+          `p-${stationId}-${i + 1}`,
+          stationId,
+          p.name || `Pompe 0${i + 1} (${fuelBasculeGroup(s1.fuelType) === 'ESSENCE' ? 'Essence' : 'Gazoil'})`,
+          s1,
+          s2
+        ));
       });
     } else {
-      // Pompes standard par défaut
-      createdPumps.push({
-        id: `p-${stationId}-1`,
-        stationId: stationId,
-        tankId: createdTanks[0]?.id || `tk-essence-${stationId}`,
-        name: 'Pompe 01 (Essence)',
-        fuelType: 'ESSENCE',
-        startIndex: 0,
-        endIndex: 0,
-        returnToTank: 0,
-        unitPrice: 12000
-      });
-      createdPumps.push({
-        id: `p-${stationId}-2`,
-        stationId: stationId,
-        tankId: createdTanks[1]?.id || `tk-gazoil-${stationId}`,
-        name: 'Pompe 02 (Gazoil)',
-        fuelType: 'GAZOIL',
-        startIndex: 0,
-        endIndex: 0,
-        returnToTank: 0,
-        unitPrice: 12000
-      });
+      // Pompe standard : pistolet1 essence, pistolet2 gazoil
+      const essenceTank = createdTanks.find((t) => fuelBasculeGroup(t.fuelType) === 'ESSENCE') || createdTanks[0];
+      const gazoilTank = createdTanks.find((t) => fuelBasculeGroup(t.fuelType) === 'GAZOIL') || essenceTank;
+      createdPumps.push(pumpFromSpecs(
+        `p-${stationId}-1`,
+        stationId,
+        'Pompe 01 (2 pistolets)',
+        { fuelType: essenceTank?.fuelType || 'ESSENCE', tankId: essenceTank?.id || '', unitPrice: 12000 },
+        { fuelType: gazoilTank?.fuelType || 'GAZOIL', tankId: gazoilTank?.id || '', unitPrice: 12000 }
+      ));
     }
+
+    // Les cuves alimentent les pompes via leurs pistolets (point de rencontre).
+    createdPumps.forEach((pump) => {
+      [pump.nozzle1, pump.nozzle2].forEach((nozzle) => {
+        const tank = createdTanks.find((t) => t.id === nozzle.tankId);
+        if (tank && !tank.suppliesPumpIds.includes(pump.id)) {
+          tank.suppliesPumpIds.push(pump.id);
+        }
+      });
+    });
 
     // 3. Compte Gérant si spécifié
     if (data.manager && data.manager.email && data.manager.fullName) {
@@ -856,11 +972,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
             transportAllowance: 150000,
             livingAllowance: 150000,
             housingAllowance: 200000,
-            prime: 0,
-            primeLabel: '',
+            prime: Number(emp.prime) || 0,
+            primeLabel: emp.primeLabel || '',
             shortages: 0,
             loans: 0,
-            netSalary: 2000000
+            netSalary: 2000000 + (Number(emp.prime) || 0)
           });
         }
       });
@@ -879,10 +995,29 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           name: cleanName,
           city: cleanCity,
-          tanks: data.tanks || createdTanks,
-          pumps: data.pumps || createdPumps,
+          tanks: createdTanks,
+          pumps: createdPumps.map((p) => ({
+            name: p.name,
+            fuelType: p.fuelType,
+            unitPrice: p.unitPrice,
+            pistolet1: {
+              fuelType: p.nozzle1.fuelType,
+              tankId: p.nozzle1.tankId,
+              unitPrice: p.nozzle1.unitPrice
+            },
+            pistolet2: {
+              fuelType: p.nozzle2.fuelType,
+              tankId: p.nozzle2.tankId,
+              unitPrice: p.nozzle2.unitPrice
+            }
+          })),
           manager: data.manager,
-          pompistes: data.pompistes || createdEmployees
+          pompistes: createdEmployees.map((emp) => ({
+            fullName: emp.fullName,
+            baseSalary: emp.baseSalary,
+            prime: emp.prime,
+            primeLabel: emp.primeLabel
+          }))
         })
       });
 
@@ -908,26 +1043,34 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           initialStock: t.initialStock,
           currentStock: t.currentStock,
           physicalStock: t.currentStock,
-          lastDipstickDate: new Date().toISOString().substring(0, 16)
+          lastDipstickDate: new Date().toISOString().substring(0, 16),
+          valveStatus: t.valveStatus || 'CLOSED',
+          basculeGroup: t.basculeGroup || fuelBasculeGroup(t.fuelType),
+          suppliesPumpIds: Array.isArray(t.suppliesPumpIds) ? t.suppliesPumpIds : []
         }));
       }
 
       if (Array.isArray(payload.pumps) && payload.pumps.length > 0) {
-        finalPumps = payload.pumps.map((p: any, i: number) => ({
-          id: p.id,
-          stationId: p.stationId,
-          tankId: p.tankId,
-          name: p.name,
-          fuelType: p.fuelType,
-          startIndex: 0,
-          endIndex: 0,
-          returnToTank: 0,
-          unitPrice: createdPumps[i]?.unitPrice ?? 12000
-        }));
+        finalPumps = payload.pumps.map((p: any, i: number) => {
+          const local = createdPumps[i];
+          const n1 = p.pistolet1 || {};
+          const n2 = p.pistolet2 || {};
+          const nozzle1 = {
+            fuelType: (n1.fuelType || p.fuelType || local?.nozzle1.fuelType || 'ESSENCE') as FuelType,
+            tankId: n1.tankId || p.tankId || local?.nozzle1.tankId || '',
+            unitPrice: Number(n1.unitPrice) || local?.nozzle1.unitPrice || 12000
+          };
+          const nozzle2 = {
+            fuelType: (n2.fuelType || local?.nozzle2.fuelType || 'GAZOIL') as FuelType,
+            tankId: n2.tankId || local?.nozzle2.tankId || '',
+            unitPrice: Number(n2.unitPrice) || local?.nozzle2.unitPrice || 12000
+          };
+          return pumpFromSpecs(p.id, p.stationId, p.name || local?.name || `Pompe ${i + 1}`, nozzle1, nozzle2);
+        });
       }
 
       if (Array.isArray(payload.employees) && payload.employees.length > 0) {
-        finalEmployees = payload.employees.map((e: any) => ({
+        finalEmployees = payload.employees.map((e: any, empIndex: number) => ({
           id: e.id,
           stationId: e.stationId,
           fullName: e.fullName,
@@ -936,11 +1079,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           transportAllowance: e.transportAllowance,
           livingAllowance: e.livingAllowance,
           housingAllowance: e.housingAllowance,
-          prime: 0,
-          primeLabel: '',
+          prime: Number(e.prime) || createdEmployees[empIndex]?.prime || 0,
+          primeLabel: e.primeLabel || createdEmployees[empIndex]?.primeLabel || '',
           shortages: 0,
           loans: 0,
-          netSalary: e.baseSalary
+          netSalary: (Number(e.baseSalary) || 0) + (Number(e.prime) || createdEmployees[empIndex]?.prime || 0)
         }));
       }
     } catch (e) {
@@ -958,6 +1101,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addTankToStation = (stationId: string, data: { code: string; fuelType: FuelType; capacity: number; initialStock: number }): TankMock => {
+    const group = fuelBasculeGroup(data.fuelType);
+    const hasOpenTank = tanks.some((t) => t.stationId === stationId && fuelBasculeGroup(t.fuelType) === group && t.valveStatus !== 'CLOSED');
     const newTank: TankMock = {
       id: `tk-${stationId}-${Date.now()}`,
       stationId,
@@ -967,26 +1112,67 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       initialStock: Number(data.initialStock) || 0,
       currentStock: Number(data.initialStock) || 0,
       physicalStock: Number(data.initialStock) || 0,
-      lastDipstickDate: new Date().toISOString().substring(0, 16)
+      lastDipstickDate: new Date().toISOString().substring(0, 16),
+      valveStatus: hasOpenTank ? 'CLOSED' : 'OPEN',
+      basculeGroup: group,
+      suppliesPumpIds: []
     };
     setTanks(prev => [...prev, newTank]);
     return newTank;
   };
 
-  const addPumpToStation = (stationId: string, data: { name: string; fuelType: FuelType; tankId: string; unitPrice?: number }): PumpMock => {
-    const newPump: PumpMock = {
-      id: `p-${stationId}-${Date.now()}`,
-      stationId,
-      tankId: data.tankId,
-      name: data.name,
-      fuelType: data.fuelType,
-      startIndex: 0,
-      endIndex: 0,
-      returnToTank: 0,
-      unitPrice: Number(data.unitPrice) || 12000
+  const addPumpToStation = (stationId: string, data: {
+    name: string;
+    pistolet1?: { fuelType: FuelType; tankId: string; unitPrice?: number };
+    pistolet2?: { fuelType: FuelType; tankId: string; unitPrice?: number };
+    fuelType?: FuelType;
+    tankId?: string;
+    unitPrice?: number;
+  }): PumpMock => {
+    const stationTanks = tanks.filter((t) => t.stationId === stationId);
+    const primaryFuel = data.pistolet1?.fuelType || data.fuelType || 'ESSENCE';
+    const n1 = {
+      fuelType: primaryFuel,
+      tankId: data.pistolet1?.tankId || data.tankId || stationTanks.find((t) => fuelBasculeGroup(t.fuelType) === fuelBasculeGroup(primaryFuel))?.id || '',
+      unitPrice: Number(data.pistolet1?.unitPrice ?? data.unitPrice) || 12000
     };
+    const otherGroup = fuelBasculeGroup(primaryFuel) === 'GAZOIL' ? 'ESSENCE' : 'GAZOIL';
+    const altTank = stationTanks.find((t) => fuelBasculeGroup(t.fuelType) === otherGroup) || stationTanks.find((t) => t.id === n1.tankId);
+    const n2 = {
+      fuelType: data.pistolet2?.fuelType || altTank?.fuelType || primaryFuel,
+      tankId: data.pistolet2?.tankId || altTank?.id || n1.tankId,
+      unitPrice: Number(data.pistolet2?.unitPrice) || n1.unitPrice
+    };
+    const newPump = pumpFromSpecs(`p-${stationId}-${Date.now()}`, stationId, data.name, n1, n2);
     setPumps(prev => [...prev, newPump]);
+    setTanks(prev => prev.map((t) => {
+      const serves = [n1.tankId, n2.tankId].includes(t.id);
+      return serves && !t.suppliesPumpIds.includes(newPump.id)
+        ? { ...t, suppliesPumpIds: [...t.suppliesPumpIds, newPump.id] }
+        : t;
+    }));
     return newPump;
+  };
+
+  // Bascule manuelle : ouvrir la vanne d'une cuve ferme toutes les autres
+  // cuves du même groupe (même carburant) servant les mêmes pompes.
+  const switchTankValve = (tankId: string) => {
+    const target = tanks.find((t) => t.id === tankId);
+    if (!target) return;
+    const group = target.basculeGroup || fuelBasculeGroup(target.fuelType);
+    setTanks(prev => prev.map((t) => {
+      if (t.stationId !== target.stationId) return t;
+      if ((t.basculeGroup || fuelBasculeGroup(t.fuelType)) !== group) return t;
+      return { ...t, valveStatus: t.id === tankId ? 'OPEN' : 'CLOSED' };
+    }));
+    notifySuccess(`Vanne ouverte sur ${target.code}. Les autres cuves ${fuelBasculeGroup(target.fuelType) === 'ESSENCE' ? 'essence' : 'gazoil'} sont fermées.`);
+  };
+
+  // Lie ou délie manuellement une cuve aux pompes qu'elle alimente.
+  const updateTankPumpLinks = (tankId: string, pumpIds: string[]) => {
+    setTanks(prev => prev.map((t) => t.id === tankId
+      ? { ...t, suppliesPumpIds: Array.from(new Set(pumpIds)) }
+      : t));
   };
 
   const deleteStation = async (stationId: string): Promise<boolean> => {
@@ -1109,28 +1295,64 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   // Helper: Record Pump Shift
   const recordPumpShift = (data: {
     pumpId: string;
+    nozzleKey: NozzleKey;
     startIndex: number;
     endIndex: number;
     returnToTank: number;
     pompisteName: string;
     shiftType: 'MATIN' | 'SOIR' | 'NUIT';
+    subscriberMode: 'NONE' | 'EXISTING' | 'NEW';
+    subscriberId?: string;
+    newSubscriber?: { name: string; phone: string; address: string; initialAdvance?: number };
   }) => {
     const pump = pumps.find(p => p.id === data.pumpId);
     if (!pump) throw new Error('Pompe non trouvée');
 
+    // Chaque pistolet possède son propre index, son prix et son carburant.
+    const legacyNozzle: PumpNozzleMock = {
+      fuelType: pump.fuelType,
+      tankId: pump.tankId,
+      startIndex: pump.startIndex,
+      endIndex: pump.endIndex,
+      returnToTank: pump.returnToTank,
+      unitPrice: pump.unitPrice
+    };
+    const nozzle = data.nozzleKey === 'P2'
+      ? (pump.nozzle2 || legacyNozzle)
+      : (pump.nozzle1 || legacyNozzle);
+    const nozzleLabel = data.nozzleKey === 'P2' ? 'Pistolet 2' : 'Pistolet 1';
+
     const litersSold = Math.max(0, data.endIndex - data.startIndex - data.returnToTank);
-    const totalAmount = litersSold * pump.unitPrice;
+    const totalAmount = litersSold * nozzle.unitPrice;
 
-    // Update pump indices
-    setPumps(prev => prev.map(p => 
-      p.id === data.pumpId 
-        ? { ...p, startIndex: data.startIndex, endIndex: data.endIndex, returnToTank: data.returnToTank }
-        : p
-    ));
+    // Mise à jour de l'index du pistolet concerné (le pistolet 1 reste le miroir historique).
+    setPumps(prev => prev.map(p => {
+      if (p.id !== data.pumpId) return p;
+      const indices = { startIndex: data.startIndex, endIndex: data.endIndex, returnToTank: data.returnToTank };
+      if (data.nozzleKey === 'P2') {
+        return {
+          ...p,
+          nozzle2: { ...(p.nozzle2 || createNozzle(nozzle.fuelType, nozzle.tankId, nozzle.unitPrice)), ...indices }
+        };
+      }
+      return {
+        ...p,
+        ...indices,
+        nozzle1: { ...(p.nozzle1 || createNozzle(nozzle.fuelType, nozzle.tankId, nozzle.unitPrice)), ...indices }
+      };
+    }));
 
-    // Deduct liters from corresponding tank (live telematics & physical sync)
-    setTanks(prev => prev.map(t => {
-      if (t.id === pump.tankId) {
+    // La cuve débitée est celle dont la vanne est ouverte dans le groupe du pistolet.
+    const group = fuelBasculeGroup(nozzle.fuelType);
+    const groupTanks = tanks.filter((t) => t.stationId === pump.stationId && fuelBasculeGroup(t.fuelType) === group);
+    const sourceTank = groupTanks.find((t) => t.id === nozzle.tankId && t.valveStatus !== 'CLOSED' && t.currentStock > 0)
+      || groupTanks.find((t) => t.valveStatus === 'OPEN' && t.currentStock > 0)
+      || groupTanks.find((t) => t.currentStock > 0)
+      || groupTanks.find((t) => t.id === nozzle.tankId);
+
+    if (sourceTank) {
+      setTanks(prev => prev.map(t => {
+        if (t.id !== sourceTank.id) return t;
         const newStock = Math.max(0, t.currentStock - litersSold);
         return {
           ...t,
@@ -1140,25 +1362,53 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
           sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
           lastTelematicsUpdate: new Date().toISOString()
         };
-      }
-      return t;
-    }));
+      }));
+    }
+
+    // Identification ou création d'un abonné pendant la tournée : le montant
+    // de la vente est immédiatement porté à son crédit.
+    let creditedSubscriber: SubscriberMock | undefined;
+    if (data.subscriberMode === 'EXISTING' && data.subscriberId) {
+      creditedSubscriber = subscribers.find((s) => s.id === data.subscriberId);
+    } else if (data.subscriberMode === 'NEW' && data.newSubscriber?.name?.trim()) {
+      creditedSubscriber = addSubscriber({
+        code: generateSubscriberCode(),
+        name: data.newSubscriber.name.trim(),
+        phone: data.newSubscriber.phone || '',
+        address: data.newSubscriber.address || '',
+        stationId: pump.stationId,
+        initialAdvance: Number(data.newSubscriber.initialAdvance) || 0,
+        initialCredit: 0
+      });
+    }
+
+    if (creditedSubscriber) {
+      const creditedId = creditedSubscriber.id;
+      setSubscribers(prev => prev.map((s) => s.id === creditedId
+        ? { ...s, currentCredit: s.currentCredit + totalAmount }
+        : s));
+    }
 
     const shift: FuelPumpShiftMock = {
       id: `shift-${Date.now()}`,
       stationId: pump.stationId,
       pumpId: pump.id,
       pumpName: pump.name,
-      fuelType: pump.fuelType,
+      fuelType: nozzle.fuelType,
       startIndex: data.startIndex,
       endIndex: data.endIndex,
       returnToTank: data.returnToTank,
       litersSold,
-      unitPrice: pump.unitPrice,
+      unitPrice: nozzle.unitPrice,
       totalAmount,
       pompisteName: data.pompisteName,
       shiftType: data.shiftType,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16)
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      nozzleKey: data.nozzleKey,
+      nozzleLabel,
+      subscriberId: creditedSubscriber?.id,
+      subscriberName: creditedSubscriber?.name,
+      creditedAmount: creditedSubscriber ? totalAmount : 0
     };
 
     setPumpShifts(prev => [shift, ...prev]);
@@ -1171,16 +1421,24 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
       operatorName: data.pompisteName,
       fields: [
-        { label: 'Pompe Saisie', value: `${pump.name} (${pump.fuelType})` },
+        { label: 'Pompe Saisie', value: pump.name },
+        { label: 'Pistolet', value: `${nozzleLabel} - ${group === 'ESSENCE' ? 'Essence' : 'Gazoil'}` },
+        { label: 'Cuve en Service (Vanne)', value: sourceTank ? `${sourceTank.code} (${sourceTank.valveStatus === 'OPEN' ? 'OUVERTE' : 'FERMÉE'})` : 'Aucune cuve disponible' },
         { label: 'Quart / Tournée', value: data.shiftType },
         { label: 'Index Départ', value: data.startIndex.toLocaleString('fr-FR') },
         { label: 'Index Arrivée', value: data.endIndex.toLocaleString('fr-FR') },
         { label: 'Retour en Cuve', value: `${data.returnToTank.toLocaleString('fr-FR')} Litres` },
         { label: 'Quantité Nette Vendue', value: `${litersSold.toLocaleString('fr-FR')} Litres` },
-        { label: 'Prix Unitaire', value: `${pump.unitPrice.toLocaleString('fr-FR')} GNF / L` },
-        { label: 'RECETTE TOTALE THÉORIQUE', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+        { label: 'Prix Unitaire', value: `${nozzle.unitPrice.toLocaleString('fr-FR')} GNF / L` },
+        { label: 'RECETTE TOTALE THÉORIQUE', value: `${totalAmount.toLocaleString('fr-FR')} GNF` },
+        ...(creditedSubscriber ? [
+          { label: 'Abonné Crédité', value: `${creditedSubscriber.name} (${creditedSubscriber.code})` },
+          { label: 'Montant Porté au Crédit', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+        ] : [])
       ],
-      notes: 'Saisie enregistrée avec succès. Sortie de cuve déduite en temps réel.'
+      notes: sourceTank
+        ? (creditedSubscriber ? 'Tournée enregistrée et montant porté au compte abonné. Sortie de cuve déduite en temps réel.' : 'Saisie enregistrée avec succès. Sortie de cuve déduite en temps réel.')
+        : 'Tournée enregistrée, mais aucune cuve de ce groupe n\'est disponible : ouvrir une vanne pour débiter le stock.'
     };
 
     addInvoice({
@@ -1235,11 +1493,21 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       : pumps.find(p => p.tankId === tank.id);
 
     if (targetPump) {
-      setPumps(prev => prev.map(p => 
-        p.id === targetPump.id 
-          ? { ...p, endIndex: p.endIndex + litersSold }
-          : p
-      ));
+      setPumps(prev => prev.map(p => {
+        if (p.id !== targetPump.id) return p;
+        const nozzle1 = p.nozzle1 || createNozzle(p.fuelType, p.tankId, p.unitPrice);
+        const nozzle2 = p.nozzle2 || createNozzle(p.fuelType === 'GAZOIL' ? 'ESSENCE' : 'GAZOIL', p.tankId, p.unitPrice);
+        const targetKey = nozzle1.tankId === tank.id || fuelBasculeGroup(nozzle1.fuelType) === fuelBasculeGroup(tank.fuelType)
+          ? 'P1'
+          : 'P2';
+        return targetKey === 'P1'
+          ? {
+              ...p,
+              endIndex: p.endIndex + litersSold,
+              nozzle1: { ...nozzle1, endIndex: nozzle1.endIndex + litersSold }
+            }
+          : { ...p, nozzle2: { ...nozzle2, endIndex: nozzle2.endIndex + litersSold } };
+      }));
     }
 
     // 3. Enregistrer dans l'historique des tournées / shifts
@@ -1418,6 +1686,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     stationId?: string;
     initialAdvance?: number;
     initialCredit?: number;
+    creditLiters?: number;
   }) => {
     const targetStationId = data.stationId || activeStationId;
     const newSub: SubscriberMock = {
@@ -1429,6 +1698,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       address: data.address,
       currentAdvance: data.initialAdvance || 0,
       currentCredit: data.initialCredit || 0,
+      creditLiters: data.creditLiters || 0,
       lastPaymentDate: new Date().toISOString().substring(0, 10)
     };
 
@@ -1545,26 +1815,27 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       return s;
     }));
 
-    // Déduire les litres servis de la cuve correspondante (live sync télématique)
-    setTanks(prev => {
-      let deducted = false;
-      return prev.map(t => {
-        const isEssenceMatch = (t.fuelType === 'ESSENCE' || t.fuelType === 'SUPER') && (data.fuelType === 'ESSENCE' || data.fuelType === 'SUPER');
-        if (!deducted && (t.fuelType === data.fuelType || isEssenceMatch)) {
-          deducted = true;
-          const newStock = Math.max(0, t.currentStock - data.liters);
-          return {
-            ...t,
-            currentStock: newStock,
-            sensorLiters: newStock,
-            physicalStock: newStock,
-            sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
-            lastTelematicsUpdate: new Date().toISOString()
-          };
-        }
-        return t;
-      });
-    });
+    // Déduire les litres de la cuve dont la vanne est ouverte dans le groupe.
+    const group = fuelBasculeGroup(data.fuelType);
+    const groupTanks = tanks.filter((t) => t.stationId === sub.stationId && fuelBasculeGroup(t.fuelType) === group);
+    const sourceTank = groupTanks.find((t) => t.valveStatus === 'OPEN' && t.currentStock > 0)
+      || groupTanks.find((t) => t.currentStock > 0);
+
+    if (sourceTank) {
+      const sourceTankId = sourceTank.id;
+      setTanks(prev => prev.map(t => {
+        if (t.id !== sourceTankId) return t;
+        const newStock = Math.max(0, t.currentStock - data.liters);
+        return {
+          ...t,
+          currentStock: newStock,
+          sensorLiters: newStock,
+          physicalStock: newStock,
+          sensorPercent: t.capacity > 0 ? Math.min(100, Math.round((newStock / t.capacity) * 100)) : 0,
+          lastTelematicsUpdate: new Date().toISOString()
+        };
+      }));
+    }
 
     const docNo = `BON-CARBU-${Math.floor(1000 + Math.random() * 9000)}`;
     const receipt: ReceiptData = {
@@ -1775,8 +2046,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     transportAllowance: number;
     livingAllowance: number;
     housingAllowance: number;
+    prime?: number;
+    primeLabel?: string;
   }) => {
-    const gross = data.baseSalary + data.transportAllowance + data.livingAllowance + data.housingAllowance;
+    const prime = Number(data.prime) || 0;
+    const gross = data.baseSalary + data.transportAllowance + data.livingAllowance + data.housingAllowance + prime;
     const targetStationId = data.stationId || activeStationId;
     const newEmp: EmployeeMock = {
       id: `emp-${Date.now()}`,
@@ -1787,8 +2061,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       transportAllowance: data.transportAllowance,
       livingAllowance: data.livingAllowance,
       housingAllowance: data.housingAllowance,
-      prime: 0,
-      primeLabel: '',
+      prime,
+      primeLabel: data.primeLabel || '',
       shortages: 0,
       loans: 0,
       netSalary: gross
@@ -1816,12 +2090,13 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Helper: Generate Employee Payslip
-  const generateEmployeePayslip = (empId: string, overridePrime?: number, overridePrimeLabel?: string): ReceiptData | null => {
+  const generateEmployeePayslip = (empId: string): ReceiptData | null => {
     const emp = employees.find(e => e.id === empId);
     if (!emp) return null;
 
-    const prime = overridePrime !== undefined ? overridePrime : (emp.prime || 0);
-    const primeLabel = overridePrimeLabel || emp.primeLabel || 'Prime Exceptionnelle';
+    // La prime est saisie à la création du pompiste : aucun ajout a posteriori.
+    const prime = emp.prime || 0;
+    const primeLabel = emp.primeLabel || 'Prime Exceptionnelle';
     const totalAllowances = emp.transportAllowance + emp.livingAllowance + emp.housingAllowance;
     const gross = emp.baseSalary + totalAllowances;
     const net = gross + prime - emp.shortages - emp.loans;
@@ -1910,6 +2185,8 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         addStation,
         addTankToStation,
         addPumpToStation,
+        switchTankValve,
+        updateTankPumpLinks,
         deleteStation,
         deleteAllStations,
         deleteTank,

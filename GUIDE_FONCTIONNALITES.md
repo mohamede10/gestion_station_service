@@ -21,9 +21,14 @@ L'application a été entièrement développée et configurée pour répondre à
   - Saisie des dépotages avec N° de Bon de Livraison (BL), immatriculation du camion citerne, nom du chauffeur livreur, fournisseur/dépôt (ex: Coronthie) et volume livré en litres.
   - Augmentation automatique et traçable du stock en cuve.
 - **Stock Sortant (Tournées Pompes) :**
-  - Saisie par quart (Matin, Soir, Nuit) des index de départ, index d'arrivée, retour en cuve (essais/purges) et pompiste responsable.
-  - Calcul automatique des litres nets vendus et de la recette totale à recouvrer au prix réglementé (12 000 GNF/L).
-  - Déduction automatique sur le stock de la cuve correspondante.
+  - Chaque pompe possède **deux pistolets** (Pistolet 1 et Pistolet 2) avec carburant, cuve, prix et index indépendants. Le pistolet 1 peut servir l'essence et le pistolet 2 le gazoil.
+  - Saisie par quart (Matin, Soir, Nuit) du pistolet utilisé, des index de départ/arrivée, du retour en cuve (essais/purges) et du pompiste responsable.
+  - Identification d'un abonné existant ou création rapide d'un nouvel abonné pendant la tournée : le montant calculé est porté automatiquement à son crédit.
+  - Calcul automatique des litres nets vendus et de la recette totale au prix du pistolet sélectionné.
+  - Déduction automatique sur la cuve dont la vanne est ouverte dans le groupe du carburant.
+- **Bascule des Cuves / Vannes :**
+  - Onglet dédié permettant d'ouvrir la vanne de la cuve en service ; les autres cuves du même carburant (groupe ESSENCE ou GAZOIL) sont fermées automatiquement.
+  - Les pistolets restent raccordés au groupe de distribution, quelle que soit la cuve active.
 - **Contrôle des Écarts & Détection de Coulage (Jaugeage Physique) :**
   - Saisie du niveau mesuré à la règle graduée.
   - Calcul de l'écart : `Stock Physique - Stock Théorique`.
@@ -38,6 +43,7 @@ L'application a été entièrement développée et configurée pour répondre à
 ### 2. 👥 Abonnés, Flottes, Crédits & Factures (`/abonnes`)
 - **Fiches Abonnés :**
   - Répertoire complet des entreprises et clients abonnés avec coordonnées, téléphone et adresse.
+  - Création avec **avance initiale**, **nombre de litres crédités** et **prix unitaire** : le montant du crédit est calculé automatiquement (`litres × prix`).
   - Suivi en temps réel : **Acomptes (avances versées)**, **Crédits (consommations cumulées)** et **Reste net à payer**.
 - **Saisie Obligatoire des Versements :**
   - **Nom du Déposant / Payeur** (Obligatoire).
@@ -76,6 +82,7 @@ L'application a été entièrement développée et configurée pour répondre à
 - **Registre du Personnel :**
   - Fiches complètes : Pompistes, Chefs de piste, Gérants, Gardiens de nuit, Caissiers.
   - Grille salariale : Salaire de base, prime de transport, prime de panier/vie chère, indemnité de logement.
+  - La **prime de salaire** (montant et libellé) est saisie dès la création de l'employé ou du pompiste ; elle est ensuite reprise automatiquement dans le bulletin. Il n'existe plus d'ajout de prime a posteriori.
 - **Gestion des Manquants & Prêts :**
   - Imputation des manquants pompistes constatés lors des clôtures de quarts.
   - Gestion des avances et prêts sur salaire.
@@ -100,7 +107,8 @@ L'application a été entièrement développée et configurée pour répondre à
   - Chaque gérant local a accès uniquement aux données de sa propre station.
 - **Déploiement de Nouvelles Stations :**
   - Création instantanée d'une station dans n'importe quelle ville (ex: Labé, Kindia, Mamou, Kankan, Nzérékoré...).
-  - Initialisation automatique des cuves (Super, Gazoil) et des pompes associées.
+  - Initialisation automatique des cuves (Essence, Gazoil) et de **pompes à deux pistolets** (index, carburant, cuve et prix indépendants).
+  - Salaire de base et prime des pompistes saisis dès le déploiement.
 - **Bascule Instantanée :**
   - Sélecteur direct dans la barre de navigation supérieure pour passer d'une station à l'autre ou revenir à la vue consolidée.
 

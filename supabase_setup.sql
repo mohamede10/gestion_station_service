@@ -35,7 +35,7 @@ DROP TYPE IF EXISTS "DocType" CASCADE;
 
 -- 3. TYPES ÉNUMÉRÉS (ENUMS)
 CREATE TYPE "Role" AS ENUM ('SUPER_ADMIN', 'GERANT', 'CHEF_PISTE', 'CAISSIER');
-CREATE TYPE "FuelType" AS ENUM ('SUPER', 'GAZOIL');
+CREATE TYPE "FuelType" AS ENUM ('ESSENCE', 'SUPER', 'GAZOIL');
 CREATE TYPE "PaymentMethod" AS ENUM ('BANK_TRANSFER', 'MOBILE_MONEY', 'CHECK', 'CASH');
 CREATE TYPE "ExpenseCategory" AS ENUM ('EDG', 'GROUPE_ELECTROGENE', 'TELEPHONE_INTERNET', 'TRANSPORT', 'ENTRETIEN_REPARATIONS', 'FOURNITURES', 'DIVERS');
 CREATE TYPE "DocType" AS ENUM ('PAYMENT_RECEIPT', 'FUEL_VOUCHER', 'CASH_OUT_CERTIFICATE', 'INVOICE', 'PAYSLIP');
@@ -71,6 +71,9 @@ CREATE TABLE "Tank" (
     "capacity" DOUBLE PRECISION NOT NULL,
     "initialStock" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "currentStock" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "valveStatus" TEXT NOT NULL DEFAULT 'OPEN',
+    "basculeGroup" TEXT NOT NULL DEFAULT 'ESSENCE',
+    "suppliesPumpIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -99,9 +102,24 @@ CREATE TABLE "TankDipstick" (
 CREATE TABLE "Pump" (
     "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     "stationId" TEXT NOT NULL REFERENCES "Station"("id") ON DELETE CASCADE,
+    -- Miroir du pistolet 1 pour compatibilité
     "tankId" TEXT NOT NULL REFERENCES "Tank"("id") ON DELETE CASCADE,
+    "fuelType" "FuelType" NOT NULL,
     "name" TEXT NOT NULL,
-    "fuelType" "FuelType" NOT NULL
+    -- Pistolet 1 : carburant, cuve et index indépendants
+    "pistolet1FuelType" "FuelType" NOT NULL DEFAULT 'SUPER',
+    "pistolet1TankId" TEXT,
+    "pistolet1StartIndex" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet1EndIndex" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet1ReturnToTank" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet1UnitPrice" DOUBLE PRECISION NOT NULL DEFAULT 12000,
+    -- Pistolet 2 : peut servir l'autre carburant
+    "pistolet2FuelType" "FuelType" NOT NULL DEFAULT 'GAZOIL',
+    "pistolet2TankId" TEXT,
+    "pistolet2StartIndex" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet2EndIndex" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet2ReturnToTank" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "pistolet2UnitPrice" DOUBLE PRECISION NOT NULL DEFAULT 12000
 );
 
 -- Relevés de pompes (VIDE - Prêt pour vos premiers index réels)
@@ -151,6 +169,7 @@ CREATE TABLE "Subscriber" (
     "address" TEXT,
     "currentAdvance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "currentCredit" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "creditLiters" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -218,6 +237,8 @@ CREATE TABLE "Employee" (
     "transportAllowance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "livingAllowance" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "housingAllowance" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "prime" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "primeLabel" TEXT,
     "status" TEXT NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -254,6 +275,8 @@ CREATE TABLE "PayrollSlip" (
     "monthLoans" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "shortagesDeducted" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "reimbursements" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "prime" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "primeLabel" TEXT,
     "netPayable" DOUBLE PRECISION NOT NULL,
     "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

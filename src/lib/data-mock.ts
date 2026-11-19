@@ -68,6 +68,29 @@ export function formatFuelName(fuelType?: string | null): string {
 
 // ─── INTERFACES ──────────────────────────────────────────────────────────────
 
+// Un pistolet est une sortie indépendante d'une pompe (index et carburant propres).
+export type NozzleKey = 'P1' | 'P2';
+
+export interface PumpNozzleMock {
+  fuelType: FuelType;
+  tankId: string;
+  startIndex: number;
+  endIndex: number;
+  returnToTank: number;
+  unitPrice: number;
+}
+
+export function createNozzle(fuelType: FuelType, tankId: string, unitPrice = 12000): PumpNozzleMock {
+  return {
+    fuelType,
+    tankId,
+    startIndex: 0,
+    endIndex: 0,
+    returnToTank: 0,
+    unitPrice
+  };
+}
+
 export interface TankMock {
   id: string;
   stationId: string;
@@ -78,6 +101,11 @@ export interface TankMock {
   currentStock: number;
   physicalStock: number;
   lastDipstickDate: string;
+  // Bascule / vanne : plusieurs cuves du même carburant alimentent un même
+  // point de rencontre. Le technicien ouvre la vanne de la cuve active.
+  valveStatus: 'OPEN' | 'CLOSED';
+  basculeGroup: string;
+  suppliesPumpIds: string[];
   // Télématique Ruptela Smart5 & Sondes Eurosens Dominator BT
   telematicsImei?: string;
   sensorBleMac?: string;
@@ -94,6 +122,7 @@ export interface TankMock {
 export interface PumpMock {
   id: string;
   stationId: string;
+  // Champs historiques (miroir du pistolet 1) conservés pour compatibilité.
   tankId: string;
   name: string;
   fuelType: FuelType;
@@ -101,6 +130,9 @@ export interface PumpMock {
   endIndex: number;
   returnToTank: number;
   unitPrice: number;
+  // Une pompe dessert toujours deux pistolets, avec des index indépendants.
+  nozzle1: PumpNozzleMock;
+  nozzle2: PumpNozzleMock;
 }
 
 export interface SubscriberMock {
@@ -113,6 +145,8 @@ export interface SubscriberMock {
   currentAdvance: number;
   currentCredit: number;
   lastPaymentDate?: string;
+  // Volume initial crédité (les litres saisis à la création).
+  creditLiters?: number;
 }
 
 export interface ProductMock {
@@ -195,6 +229,12 @@ export interface FuelPumpShiftMock {
   pompisteName: string;
   shiftType: 'MATIN' | 'SOIR' | 'NUIT';
   timestamp: string;
+  // Pistolet utilisé et abonné crédité pendant la tournée (si applicable).
+  nozzleKey?: NozzleKey;
+  nozzleLabel?: string;
+  subscriberId?: string;
+  subscriberName?: string;
+  creditedAmount?: number;
 }
 
 export interface CertifiedDocumentMock {

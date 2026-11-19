@@ -29,6 +29,36 @@ import {
   RotateCcw
 } from 'lucide-react';
 
+type FuelChoice = 'ESSENCE' | 'GAZOIL' | 'SUPER';
+type NozzleDraft = { fuelType: FuelChoice; tankIndex: number; unitPrice: string };
+type PumpDraft = {
+  name: string;
+  // Miroir du pistolet 1, conservé pour les anciens parcours.
+  fuelType: FuelChoice;
+  tankIndex: number;
+  unitPrice: string;
+  pistolet1: NozzleDraft;
+  pistolet2: NozzleDraft;
+};
+
+function pumpDraft(
+  name: string,
+  fuel1: FuelChoice,
+  tank1: number,
+  fuel2: FuelChoice,
+  tank2: number,
+  unitPrice = '12000'
+): PumpDraft {
+  return {
+    name,
+    fuelType: fuel1,
+    tankIndex: tank1,
+    unitPrice,
+    pistolet1: { fuelType: fuel1, tankIndex: tank1, unitPrice },
+    pistolet2: { fuelType: fuel2, tankIndex: tank2, unitPrice }
+  };
+}
+
 export default function StationsPage() {
   const { 
     stations, 
@@ -95,6 +125,8 @@ export default function StationsPage() {
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpTitle, setNewEmpTitle] = useState('Pompiste');
   const [newEmpSalary, setNewEmpSalary] = useState('550000');
+  const [newEmpPrime, setNewEmpPrime] = useState('0');
+  const [newEmpPrimeLabel, setNewEmpPrimeLabel] = useState('Prime de rendement');
   const [newEmpStation, setNewEmpStation] = useState(stations[0]?.id || '');
 
   const handleAddEmp = (e: React.FormEvent) => {
@@ -108,9 +140,12 @@ export default function StationsPage() {
       transportAllowance: 80000,
       livingAllowance: 70000,
       housingAllowance: 50000,
+      prime: parseFloat(newEmpPrime) || 0,
+      primeLabel: newEmpPrimeLabel || 'Prime de rendement',
     });
     notifySuccess(`Pompiste "${newEmpName}" ajouté avec succès à l'effectif !`);
     setNewEmpName('');
+    setNewEmpPrime('0');
   };
 
   // ── Form: Nouvel Abonné (Code Client auto-attribué par le système) ─────────────
@@ -120,6 +155,8 @@ export default function StationsPage() {
   const [newSubAddress, setNewSubAddress] = useState('Conakry');
   const [newSubStation, setNewSubStation] = useState(stations[0]?.id || '');
   const [newSubAdvance, setNewSubAdvance] = useState('0');
+  const [newSubCreditLiters, setNewSubCreditLiters] = useState('0');
+  const newSubAmount = (parseFloat(newSubCreditLiters) || 0) * 12000;
 
   // Synchronisation dynamique du Code Client
   React.useEffect(() => {
@@ -136,6 +173,8 @@ export default function StationsPage() {
       address: newSubAddress,
       stationId: newSubStation || undefined,
       initialAdvance: parseFloat(newSubAdvance) || 0,
+      initialCredit: newSubAmount,
+      creditLiters: parseFloat(newSubCreditLiters) || 0,
     });
     notifySuccess(`Abonné "${sub.name}" (${sub.code}) créé avec succès !`);
     setNewSubName('');
@@ -170,9 +209,8 @@ export default function StationsPage() {
   ]);
 
   // Pompes à créer (unitPrice en string pour permettre la saisie libre)
-  const [customPumps, setCustomPumps] = useState<Array<{ name: string; fuelType: 'ESSENCE' | 'GAZOIL' | 'SUPER'; tankIndex: number; unitPrice: string }>>([
-    { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
-    { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
+  const [customPumps, setCustomPumps] = useState<PumpDraft[]>([
+    pumpDraft('Pompe 01 (2 pistolets)', 'ESSENCE', 0, 'GAZOIL', 1),
   ]);
 
   // Personnel (Gérant & Pompistes)
@@ -180,9 +218,9 @@ export default function StationsPage() {
   const [managerEmail, setManagerEmail] = useState('gerant.kankan@totalenergies.gn');
   const [managerPassword, setManagerPassword] = useState('admin');
 
-  const [pompistesList, setPompistesList] = useState<Array<{ fullName: string; baseSalary: string }>>([
-    { fullName: 'Mamadou Diallo', baseSalary: '1500000' },
-    { fullName: 'Ousmane Camara', baseSalary: '1500000' }
+  const [pompistesList, setPompistesList] = useState<Array<{ fullName: string; baseSalary: string; prime: string; primeLabel: string }>>([
+    { fullName: 'Mamadou Diallo', baseSalary: '1500000', prime: '0', primeLabel: 'Prime de rendement' },
+    { fullName: 'Ousmane Camara', baseSalary: '1500000', prime: '0', primeLabel: 'Prime de rendement' }
   ]);
 
   // Modale Détails & Configuration d'une station existante
@@ -207,8 +245,7 @@ export default function StationsPage() {
         { code: 'CUVE 02 - GAZOIL', fuelType: 'GAZOIL', capacity: '45000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
-        { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
+        pumpDraft('Pompe 01 (2 pistolets)', 'ESSENCE', 0, 'GAZOIL', 1),
       ]);
     } else if (preset === '3tanks') {
       setCustomTanks([
@@ -217,9 +254,8 @@ export default function StationsPage() {
         { code: 'CUVE 03 - GAZOIL PRO', fuelType: 'GAZOIL', capacity: '50000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Essence)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
-        { name: 'Pompe 02 (Gazoil)', fuelType: 'GAZOIL', tankIndex: 1, unitPrice: '12000' },
-        { name: 'Pompe 03 (Gazoil Poids Lourds)', fuelType: 'GAZOIL', tankIndex: 2, unitPrice: '12000' },
+        pumpDraft('Pompe 01 (2 pistolets)', 'ESSENCE', 0, 'GAZOIL', 1),
+        pumpDraft('Pompe 02 (Gazoil Poids Lourds)', 'GAZOIL', 2, 'ESSENCE', 0),
       ]);
     } else if (preset === '4tanks') {
       setCustomTanks([
@@ -229,10 +265,8 @@ export default function StationsPage() {
         { code: 'CUVE 04 - GAZOIL 2', fuelType: 'GAZOIL', capacity: '50000', initialStock: '0' },
       ]);
       setCustomPumps([
-        { name: 'Pompe 01 (Essence A)', fuelType: 'ESSENCE', tankIndex: 0, unitPrice: '12000' },
-        { name: 'Pompe 02 (Essence B)', fuelType: 'ESSENCE', tankIndex: 1, unitPrice: '12000' },
-        { name: 'Pompe 03 (Gazoil A)', fuelType: 'GAZOIL', tankIndex: 2, unitPrice: '12000' },
-        { name: 'Pompe 04 (Gazoil B)', fuelType: 'GAZOIL', tankIndex: 3, unitPrice: '12000' },
+        pumpDraft('Pompe 01 (Essence 1 / Gazoil 1)', 'ESSENCE', 0, 'GAZOIL', 2),
+        pumpDraft('Pompe 02 (Essence 2 / Gazoil 2)', 'ESSENCE', 1, 'GAZOIL', 3),
       ]);
     }
   };
@@ -258,8 +292,20 @@ export default function StationsPage() {
           initialStock: parseFloat(t.initialStock) || 0,
         })),
         pumps: customPumps.map(p => ({
-          ...p,
-          unitPrice: parseFloat(p.unitPrice) || 0,
+          name: p.name,
+          fuelType: p.pistolet1.fuelType,
+          tankIndex: p.pistolet1.tankIndex,
+          unitPrice: parseFloat(p.pistolet1.unitPrice) || 0,
+          pistolet1: {
+            fuelType: p.pistolet1.fuelType,
+            tankIndex: p.pistolet1.tankIndex,
+            unitPrice: parseFloat(p.pistolet1.unitPrice) || 0
+          },
+          pistolet2: {
+            fuelType: p.pistolet2.fuelType,
+            tankIndex: p.pistolet2.tankIndex,
+            unitPrice: parseFloat(p.pistolet2.unitPrice) || 0
+          }
         })),
         manager: managerEmail ? {
           fullName: managerName,
@@ -268,7 +314,12 @@ export default function StationsPage() {
         } : undefined,
         pompistes: pompistesList
           .filter(p => p.fullName.trim().length > 0)
-          .map(p => ({ ...p, baseSalary: parseFloat(p.baseSalary) || 0 }))
+          .map(p => ({
+            fullName: p.fullName,
+            baseSalary: parseFloat(p.baseSalary) || 0,
+            prime: parseFloat(p.prime) || 0,
+            primeLabel: p.primeLabel || 'Prime de rendement'
+          }))
       };
 
       const newSt = await addStation(payload);
@@ -793,6 +844,26 @@ export default function StationsPage() {
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Prime (GNF) :</label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-amber-300 font-mono outline-none focus:border-amber-500"
+                        value={newEmpPrime}
+                        onChange={e => setNewEmpPrime(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Libellé de la prime :</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white outline-none focus:border-amber-500"
+                        value={newEmpPrimeLabel}
+                        onChange={e => setNewEmpPrimeLabel(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-slate-300 font-bold mb-1">Station d'affectation :</label>
                     <select
@@ -924,6 +995,18 @@ export default function StationsPage() {
                         value={newSubAdvance}
                         onChange={e => setNewSubAdvance(e.target.value)}
                       />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">Litres crédités (L) :</label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-white font-mono outline-none focus:border-emerald-500"
+                        value={newSubCreditLiters}
+                        onChange={e => setNewSubCreditLiters(e.target.value)}
+                      />
+                      <div className="text-[11px] text-emerald-400 font-bold mt-1">
+                        Montant crédité automatiquement : {newSubAmount.toLocaleString('fr-FR')} GNF
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1252,9 +1335,14 @@ export default function StationsPage() {
                     <span className="text-[11px] text-slate-400">Raccordées aux {customTanks.length} cuves créées</span>
                   </div>
 
+                  <div className="bg-blue-950/30 border border-blue-800/40 rounded-xl p-3 text-[11px] text-blue-300">
+                    Une pompe possède <strong className="text-white">deux pistolets</strong> avec des carburants, des cuves et des index indépendants.
+                    Le pistolet 1 peut servir l'essence et le pistolet 2 le gazoil.
+                  </div>
+
                   <div className="space-y-3">
                     {customPumps.map((pump, pIdx) => (
-                      <div key={pIdx} className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl space-y-2.5">
+                      <div key={pIdx} className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-white flex items-center gap-1.5">
                             <Gauge className="w-4 h-4 text-red-500" />
@@ -1275,58 +1363,91 @@ export default function StationsPage() {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-slate-400 font-semibold mb-1">Nom / Numéro Pompe :</label>
-                            <input
-                              type="text"
-                              value={pump.name}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setCustomPumps(prev => prev.map((p, i) => i === pIdx ? { ...p, name: val } : p));
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-slate-400 font-semibold mb-1">Cuve d'Alimentation :</label>
-                            <select
-                              value={pump.tankIndex}
-                              onChange={(e) => {
-                                const tIdx = Number(e.target.value);
-                                const correspondingTank = customTanks[tIdx];
-                                setCustomPumps(prev => prev.map((p, i) => i === pIdx ? { 
-                                  ...p, 
-                                  tankIndex: tIdx,
-                                  fuelType: correspondingTank ? correspondingTank.fuelType : p.fuelType
-                                } : p));
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
-                            >
-                              {customTanks.map((t, idx) => (
-                                <option key={idx} value={idx}>
-                                  {t.code} ({t.fuelType})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-slate-400 font-semibold mb-1">Prix Unitaire (GNF/L) :</label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="ex: 12000"
-                              value={pump.unitPrice}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9.]/g, '');
-                                setCustomPumps(prev => prev.map((p, i) => i === pIdx ? { ...p, unitPrice: val } : p));
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-amber-400 font-mono font-bold"
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-slate-400 font-semibold mb-1">Nom / Numéro Pompe :</label>
+                          <input
+                            type="text"
+                            value={pump.name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomPumps(prev => prev.map((p, i) => i === pIdx ? { ...p, name: val } : p));
+                            }}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium"
+                          />
                         </div>
+
+                        {(['pistolet1', 'pistolet2'] as const).map((key) => {
+                          const nozzle = pump[key];
+                          const label = key === 'pistolet1' ? 'Pistolet 1' : 'Pistolet 2';
+                          const updateNozzle = (patch: Partial<NozzleDraft>) => {
+                            setCustomPumps(prev => prev.map((p, i) => {
+                              if (i !== pIdx) return p;
+                              const updated = { ...p[key], ...patch };
+                              return {
+                                ...p,
+                                [key]: updated,
+                                ...(key === 'pistolet1' ? { fuelType: updated.fuelType, tankIndex: updated.tankIndex, unitPrice: updated.unitPrice } : {})
+                              };
+                            }));
+                          };
+                          return (
+                            <div key={key} className="bg-slate-900/70 border border-slate-800 rounded-lg p-3 space-y-2">
+                              <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wide">{label}</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                <div>
+                                  <label className="block text-slate-400 font-semibold mb-1">Carburant :</label>
+                                  <select
+                                    value={nozzle.fuelType}
+                                    onChange={(e) => {
+                                      const fuel = e.target.value as FuelChoice;
+                                      const matchingTank = customTanks.findIndex(t =>
+                                        fuel === 'GAZOIL' ? t.fuelType === 'GAZOIL' : t.fuelType !== 'GAZOIL'
+                                      );
+                                      updateNozzle({
+                                        fuelType: fuel,
+                                        tankIndex: matchingTank >= 0 ? matchingTank : nozzle.tankIndex
+                                      });
+                                    }}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
+                                  >
+                                    <option value="ESSENCE">Essence</option>
+                                    <option value="SUPER">Super</option>
+                                    <option value="GAZOIL">Gazoil</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-slate-400 font-semibold mb-1">Cuve d'alimentation :</label>
+                                  <select
+                                    value={nozzle.tankIndex}
+                                    onChange={(e) => {
+                                      const tIdx = Number(e.target.value);
+                                      const correspondingTank = customTanks[tIdx];
+                                      updateNozzle({
+                                        tankIndex: tIdx,
+                                        fuelType: correspondingTank ? correspondingTank.fuelType : nozzle.fuelType
+                                      });
+                                    }}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
+                                  >
+                                    {customTanks.map((t, idx) => (
+                                      <option key={idx} value={idx}>{t.code} ({t.fuelType})</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-slate-400 font-semibold mb-1">Prix (GNF/L) :</label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={nozzle.unitPrice}
+                                    onChange={(e) => updateNozzle({ unitPrice: e.target.value.replace(/[^0-9.]/g, '') })}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-amber-400 font-mono font-bold"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     ))}
                   </div>
@@ -1335,19 +1456,20 @@ export default function StationsPage() {
                     type="button"
                     onClick={() => {
                       setCustomPumps(prev => [
-                        ...prev, 
-                        { 
-                          name: `Pompe 0${prev.length + 1} (${customTanks[0]?.fuelType === 'SUPER' ? 'ESSENCE' : (customTanks[0]?.fuelType || 'ESSENCE')})`, 
-                          fuelType: customTanks[0]?.fuelType || 'ESSENCE', 
-                          tankIndex: 0, 
-                          unitPrice: '12000' 
-                        }
+                        ...prev,
+                        pumpDraft(
+                          `Pompe 0${prev.length + 1} (2 pistolets)`,
+                          customTanks[0]?.fuelType || 'ESSENCE',
+                          0,
+                          customTanks[1]?.fuelType || 'GAZOIL',
+                          customTanks[1] ? 1 : 0
+                        )
                       ]);
                     }}
                     className="w-full py-2.5 rounded-xl border border-dashed border-slate-700 hover:border-red-500 text-slate-300 hover:text-red-400 transition flex items-center justify-center gap-2 font-bold"
                   >
                     <Plus className="w-4 h-4" />
-                    Ajouter une Pompe Supplémentaire
+                    Ajouter une Pompe à Deux Pistolets
                   </button>
                 </div>
               )}
@@ -1411,8 +1533,8 @@ export default function StationsPage() {
                         type="button"
                         onClick={() => {
                           setPompistesList(prev => [
-                            ...prev, 
-                            { fullName: `Pompiste ${prev.length + 1}`, baseSalary: '1500000' }
+                            ...prev,
+                            { fullName: `Pompiste ${prev.length + 1}`, baseSalary: '1500000', prime: '0', primeLabel: 'Prime de rendement' }
                           ]);
                         }}
                         className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold border border-slate-700 flex items-center gap-1"
@@ -1421,42 +1543,73 @@ export default function StationsPage() {
                       </button>
                     </div>
 
+                    <div className="text-[11px] text-slate-400">
+                      Salaire de base et prime saisis dès la création (aucune prime ajoutée ensuite).
+                    </div>
                     <div className="space-y-2">
                       {pompistesList.map((pomp, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={pomp.fullName}
-                            placeholder="Nom et prénom du pompiste"
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, fullName: val } : p));
-                            }}
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs"
-                          />
-                          <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5">
+                        <div key={idx} className="bg-slate-900/60 border border-slate-800 rounded-lg p-2.5 space-y-2">
+                          <div className="flex items-center gap-2">
                             <input
                               type="text"
-                              inputMode="numeric"
-                              placeholder="1500000"
-                              value={pomp.baseSalary}
+                              value={pomp.fullName}
+                              placeholder="Nom et prénom du pompiste"
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, '');
-                                setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, baseSalary: val } : p));
+                                const val = e.target.value;
+                                setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, fullName: val } : p));
                               }}
-                              className="w-20 bg-transparent text-white font-mono text-xs text-right outline-none"
+                              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs"
                             />
-                            <span className="text-[10px] text-slate-400">GNF</span>
+                            {pompistesList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setPompistesList(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-slate-400 hover:text-red-400 p-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
-                          {pompistesList.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setPompistesList(prev => prev.filter((_, i) => i !== idx))}
-                              className="text-slate-400 hover:text-red-400 p-1"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5">
+                              <span className="text-[10px] text-slate-400">Salaire</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={pomp.baseSalary}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, '');
+                                  setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, baseSalary: val } : p));
+                                }}
+                                className="w-full bg-transparent text-white font-mono text-xs text-right outline-none"
+                              />
+                              <span className="text-[10px] text-slate-400">GNF</span>
+                            </label>
+                            <label className="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5">
+                              <span className="text-[10px] text-amber-400">Prime</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={pomp.prime}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, '');
+                                  setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, prime: val } : p));
+                                }}
+                                className="w-full bg-transparent text-amber-300 font-mono text-xs text-right outline-none"
+                              />
+                              <span className="text-[10px] text-slate-400">GNF</span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={pomp.primeLabel}
+                            placeholder="Libellé de la prime"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPompistesList(prev => prev.map((p, i) => i === idx ? { ...p, primeLabel: val } : p));
+                            }}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-amber-300 text-[11px]"
+                          />
                         </div>
                       ))}
                     </div>
@@ -1469,7 +1622,7 @@ export default function StationsPage() {
                     </span>
                     <div>• 1 Station : <strong>{stationName || 'Non défini'}</strong> ({stationCity})</div>
                     <div>• {customTanks.length} Cuves configurées</div>
-                    <div>• {customPumps.length} Pompes électroniques</div>
+                    <div>• {customPumps.length} Pompes à deux pistolets</div>
                     <div>• Gérant : <strong>{managerName}</strong> ({managerEmail})</div>
                     <div>• {pompistesList.length} Pompistes enregistrés</div>
                   </div>

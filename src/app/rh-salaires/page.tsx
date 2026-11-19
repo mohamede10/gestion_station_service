@@ -12,8 +12,7 @@ import {
   Edit3, 
   Save, 
   CheckCircle2,
-  Trophy,
-  Printer
+  Trophy
 } from 'lucide-react';
 import ReceiptModal, { ReceiptData } from '@/components/ReceiptModal';
 
@@ -26,15 +25,14 @@ export default function RHSalairesPage() {
     addEmployee, 
     updateEmployee, 
     generateEmployeePayslip,
-    notifySuccess,
-    notifyError
+    notifySuccess
   } = useStation();
 
   const isGlobal = !currentStation;
   const filteredEmployees = isGlobal ? employees : employees.filter(e => e.stationId === currentStation.id);
 
-  // Tab State: 'LIST' | 'NEW_EMP' | 'MANQUANTS' | 'PRIME'
-  const [activeTab, setActiveTab] = useState<'LIST' | 'NEW_EMP' | 'MANQUANTS' | 'PRIME'>('LIST');
+  // Tab State: 'LIST' | 'NEW_EMP' | 'MANQUANTS'
+  const [activeTab, setActiveTab] = useState<'LIST' | 'NEW_EMP' | 'MANQUANTS'>('LIST');
 
   // New Employee Form State
   const [fullName, setFullName] = useState<string>('');
@@ -43,6 +41,8 @@ export default function RHSalairesPage() {
   const [transportAllowance, setTransportAllowance] = useState<string>('80000');
   const [livingAllowance, setLivingAllowance] = useState<string>('70000');
   const [housingAllowance, setHousingAllowance] = useState<string>('50000');
+  const [prime, setPrime] = useState<string>('0');
+  const [primeLabel, setPrimeLabel] = useState<string>('Prime de rendement');
   // Station selection for Super Admin
   const [selectedStationId, setSelectedStationId] = useState<string>(currentStation?.id || stations[0]?.id || '');
 
@@ -50,11 +50,6 @@ export default function RHSalairesPage() {
   const [selectedEmpId, setSelectedEmpId] = useState<string>(filteredEmployees[0]?.id || '');
   const [shortagesInput, setShortagesInput] = useState<string>('0');
   const [loansInput, setLoansInput] = useState<string>('0');
-
-  // Prime (bonus) Form State
-  const [primeEmpId, setPrimeEmpId] = useState<string>(filteredEmployees[0]?.id || '');
-  const [primeAmount, setPrimeAmount] = useState<string>('');
-  const [primeLabelInput, setPrimeLabelInput] = useState<string>('Prime de rendement');
 
   // Receipt Modal State
   const [receiptModalOpen, setReceiptModalOpen] = useState<boolean>(false);
@@ -74,11 +69,14 @@ export default function RHSalairesPage() {
       baseSalary: parseFloat(baseSalary) || 0,
       transportAllowance: parseFloat(transportAllowance) || 0,
       livingAllowance: parseFloat(livingAllowance) || 0,
-      housingAllowance: parseFloat(housingAllowance) || 0
+      housingAllowance: parseFloat(housingAllowance) || 0,
+      prime: parseFloat(prime) || 0,
+      primeLabel: primeLabel || 'Prime de rendement'
     });
 
     notifySuccess(`Employé "${fullName}" ajouté avec succès à l'effectif !`);
     setFullName('');
+    setPrime('0');
     setActiveTab('LIST');
   };
 
@@ -97,39 +95,8 @@ export default function RHSalairesPage() {
     setActiveTab('LIST');
   };
 
-  // Handle Accorder une Prime
-  const handleAccorderPrime = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(primeAmount) || 0;
-    if (!primeEmpId) {
-      notifyError('Veuillez sélectionner un employé.');
-      return;
-    }
-    if (amount <= 0) {
-      notifyError('Le montant de la prime doit être supérieur à 0 GNF.');
-      return;
-    }
-
-    // Enregistre la prime dans l'employé
-    updateEmployee(primeEmpId, {
-      prime: amount,
-      primeLabel: primeLabelInput || 'Prime Exceptionnelle'
-    });
-
-    // Génère le bulletin avec la prime
-    const slip = generateEmployeePayslip(primeEmpId, amount, primeLabelInput || 'Prime Exceptionnelle');
-    if (slip) {
-      const emp = filteredEmployees.find(e => e.id === primeEmpId);
-      notifySuccess(`Prime de ${amount.toLocaleString('fr-FR')} GNF accordée à ${emp?.fullName || 'l\'employé'} ! Bulletin généré.`);
-      setReceiptData(slip);
-      setReceiptModalOpen(true);
-    }
-    setPrimeAmount('');
-  };
-
   const handlePrintSlip = (empId: string) => {
-    const emp = filteredEmployees.find(e => e.id === empId);
-    const slip = generateEmployeePayslip(empId, emp?.prime || 0, emp?.primeLabel || '');
+    const slip = generateEmployeePayslip(empId);
     if (slip) {
       setReceiptData(slip);
       setReceiptModalOpen(true);
@@ -178,13 +145,6 @@ export default function RHSalairesPage() {
             className={`px-3 py-1.5 rounded-lg font-bold transition ${activeTab === 'NEW_EMP' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
           >
             + Nouvel Employé
-          </button>
-          <button
-            onClick={() => setActiveTab('PRIME')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition ${activeTab === 'PRIME' ? 'bg-yellow-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Trophy className="w-3.5 h-3.5" />
-            Accorder une Prime
           </button>
         </div>
       </div>
@@ -336,6 +296,29 @@ export default function RHSalairesPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1 text-[10px]">Prime de salaire (GNF) :</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-amber-400 font-mono text-xs outline-none focus:border-blue-500"
+                    value={prime}
+                    onChange={(e) => setPrime(e.target.value.replace(/[^0-9.]/g, ''))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1 text-[10px]">Libellé de la prime :</label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white text-xs outline-none focus:border-blue-500"
+                    value={primeLabel}
+                    onChange={(e) => setPrimeLabel(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-lg shadow-blue-900/40 flex items-center justify-center gap-2 transition"
@@ -416,118 +399,6 @@ export default function RHSalairesPage() {
                 className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 transition"
               >
                 <Save className="w-4 h-4" /> Appliquer les Retenues Salariales
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ===== PRIME TAB ===== */}
-        {activeTab === 'PRIME' && (
-          <div className="bg-slate-900 border border-yellow-500/30 rounded-2xl p-5 shadow-xl space-y-4 lg:col-span-1">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Trophy className="w-5 h-5 text-yellow-400" />
-              <h3 className="font-extrabold text-white text-base">Accorder une Prime</h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              Saisissez le montant de la prime à accorder à l'employé. Un bulletin certifié sera automatiquement généré.
-            </p>
-
-            <form onSubmit={handleAccorderPrime} className="space-y-4">
-              {/* Sélection employé */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">Employé Bénéficiaire *</label>
-                <select
-                  value={primeEmpId}
-                  onChange={(e) => setPrimeEmpId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-yellow-500"
-                >
-                  <option value="">— Sélectionner un employé —</option>
-                  {filteredEmployees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} — {emp.jobTitle}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Libellé prime */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">Libellé de la Prime *</label>
-                <select
-                  value={primeLabelInput}
-                  onChange={(e) => setPrimeLabelInput(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-yellow-500"
-                >
-                  <option>Prime de rendement</option>
-                  <option>Prime de performance</option>
-                  <option>Prime d'assiduité</option>
-                  <option>Prime d'ancienneté</option>
-                  <option>Prime de fin d'année</option>
-                  <option>Prime de fête</option>
-                  <option>Prime exceptionnelle Direction</option>
-                  <option>Prime d'objectif atteint</option>
-                  <option>Gratification spéciale</option>
-                </select>
-              </div>
-
-              {/* Montant */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">Montant de la Prime (GNF) *</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Ex : 500 000"
-                    value={primeAmount}
-                    onChange={(e) => setPrimeAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 pr-12 focus:outline-none focus:border-yellow-500 font-mono"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-yellow-500">GNF</span>
-                </div>
-                {primeAmount && parseFloat(primeAmount) > 0 && (
-                  <p className="text-[11px] text-yellow-400 mt-1 font-semibold">
-                    = {parseFloat(primeAmount).toLocaleString('fr-FR')} GNF
-                  </p>
-                )}
-              </div>
-
-              {/* Aperçu */}
-              {primeEmpId && primeAmount && parseFloat(primeAmount) > 0 && (() => {
-                const emp = filteredEmployees.find(e => e.id === primeEmpId);
-                if (!emp) return null;
-                const totalAllowances = emp.transportAllowance + emp.livingAllowance + emp.housingAllowance;
-                const baseNet = emp.baseSalary + totalAllowances - emp.shortages - emp.loans;
-                const newNet = baseNet + parseFloat(primeAmount);
-                return (
-                  <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-3 space-y-1 text-xs">
-                    <div className="text-yellow-400 font-bold flex items-center gap-1 mb-1">
-                      <Trophy className="w-3.5 h-3.5" /> Aperçu du bulletin
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Employé :</span>
-                      <span className="font-bold text-white">{emp.fullName}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Net habituel :</span>
-                      <span className="font-mono">{baseNet.toLocaleString('fr-FR')} GNF</span>
-                    </div>
-                    <div className="flex justify-between text-yellow-400 font-bold">
-                      <span>+ {primeLabelInput} :</span>
-                      <span className="font-mono">+{parseFloat(primeAmount).toLocaleString('fr-FR')} GNF</span>
-                    </div>
-                    <div className="flex justify-between text-emerald-400 font-black border-t border-yellow-500/20 pt-1 mt-1">
-                      <span>NET À PAYER :</span>
-                      <span className="font-mono">{newNet.toLocaleString('fr-FR')} GNF</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-yellow-900/40 flex items-center justify-center gap-2 transition"
-              >
-                <Printer className="w-4 h-4" />
-                Valider la Prime & Générer le Bulletin
               </button>
             </form>
           </div>

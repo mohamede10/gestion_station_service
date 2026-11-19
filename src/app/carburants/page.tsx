@@ -18,7 +18,7 @@ import {
   Radio
 } from 'lucide-react';
 import ReceiptModal, { ReceiptData } from '@/components/ReceiptModal';
-import { formatFuelName } from '@/lib/data-mock';
+import { formatFuelName, NozzleKey } from '@/lib/data-mock';
 
 export default function CarburantsPage() {
   const { 
@@ -33,7 +33,10 @@ export default function CarburantsPage() {
     notifySuccess,
     notifyError,
     generateDeliveryNoteNumber,
-    employees
+    employees,
+    subscribers,
+    switchTankValve,
+    updateTankPumpLinks
   } = useStation();
 
   const isGlobal = !currentStation;
@@ -50,11 +53,17 @@ export default function CarburantsPage() {
   );
   const availablePompistes = stationPompistes.length > 0 ? stationPompistes : stationEmployees;
 
-  // Active Tab: 'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'HISTORY'
-  const [activeTab, setActiveTab] = useState<'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'HISTORY'>('SHIFT');
+  // Active Tab: 'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'BASCULE' | 'HISTORY'
+  const [activeTab, setActiveTab] = useState<'SHIFT' | 'DELIVERY' | 'DIPSTICK' | 'BASCULE' | 'HISTORY'>('SHIFT');
 
   // Form State: Saisie Pompiste
   const [selectedPumpId, setSelectedPumpId] = useState<string>(filteredPumps[0]?.id || '');
+  const [selectedNozzle, setSelectedNozzle] = useState<NozzleKey>('P1');
+  const [subscriberMode, setSubscriberMode] = useState<'NONE' | 'EXISTING' | 'NEW'>('NONE');
+  const [tourSubscriberId, setTourSubscriberId] = useState<string>(subscribers[0]?.id || '');
+  const [newTourSubName, setNewTourSubName] = useState<string>('');
+  const [newTourSubPhone, setNewTourSubPhone] = useState<string>('');
+  const [newTourSubAddress, setNewTourSubAddress] = useState<string>('Conakry');
   const [startIndexInput, setStartIndexInput] = useState<string>(String(filteredPumps[0]?.startIndex || 0));
   const [endIndexInput, setEndIndexInput] = useState<string>(String(filteredPumps[0]?.endIndex || 0));
   const [returnToTankInput, setReturnToTankInput] = useState<string>('0');
@@ -103,11 +112,19 @@ export default function CarburantsPage() {
     try {
       const { receipt } = recordPumpShift({
         pumpId: selectedPumpId,
+        nozzleKey: selectedNozzle,
         startIndex: parseFloat(startIndexInput) || 0,
         endIndex: parseFloat(endIndexInput) || 0,
         returnToTank: parseFloat(returnToTankInput) || 0,
         pompisteName,
-        shiftType
+        shiftType,
+        subscriberMode,
+        subscriberId: subscriberMode === 'EXISTING' ? tourSubscriberId : undefined,
+        newSubscriber: subscriberMode === 'NEW' ? {
+          name: newTourSubName,
+          phone: newTourSubPhone,
+          address: newTourSubAddress
+        } : undefined
       });
       setReceiptData(receipt);
       setReceiptModalOpen(true);
@@ -161,12 +178,22 @@ export default function CarburantsPage() {
   // Selected pump info
   const activePump = filteredPumps.find(p => p.id === selectedPumpId) || filteredPumps[0];
   const activeTank = filteredTanks.find(t => t.id === selectedTankId) || filteredTanks[0];
+  const activeNozzle = activePump
+    ? (selectedNozzle === 'P2' ? activePump.nozzle2 : activePump.nozzle1) || {
+        fuelType: activePump.fuelType,
+        tankId: activePump.tankId,
+        startIndex: activePump.startIndex,
+        endIndex: activePump.endIndex,
+        returnToTank: activePump.returnToTank,
+        unitPrice: activePump.unitPrice
+      }
+    : null;
 
   const startNum = parseFloat(startIndexInput) || 0;
   const endNum = parseFloat(endIndexInput) || 0;
   const returnNum = parseFloat(returnToTankInput) || 0;
   const soldLiters = Math.max(0, endNum - startNum - returnNum);
-  const totalAmount = soldLiters * (activePump?.unitPrice || 12000);
+  const totalAmount = soldLiters * (activeNozzle?.unitPrice || activePump?.unitPrice || 12000);
 
   return (
     <div className="space-y-6">
@@ -202,6 +229,12 @@ export default function CarburantsPage() {
             className={`px-3 py-1.5 rounded-lg font-bold transition ${activeTab === 'DIPSTICK' ? 'bg-amber-600 text-slate-950' : 'text-slate-400 hover:text-white'}`}
           >
             Jaugeage & Pertes
+          </button>
+          <button
+            onClick={() => setActiveTab('BASCULE')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition ${activeTab === 'BASCULE' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+          >
+            Bascule Cuves / Vannes
           </button>
           <button
             onClick={() => setActiveTab('HISTORY')}
@@ -302,16 +335,37 @@ export default function CarburantsPage() {
                     setSelectedPumpId(pId);
                     const found = filteredPumps.find(p => p.id === pId);
                     if (found) {
-                      setStartIndexInput(String(found.startIndex));
-                      setEndIndexInput(String(found.endIndex));
+                      setSelectedNozzle('P1');
+                      setStartIndexInput(String(found.nozzle1?.startIndex ?? found.startIndex));
+                      setEndIndexInput(String(found.nozzle1?.endIndex ?? found.endIndex));
                     }
                   }}
                 >
                   {filteredPumps.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.fuelType}) - {p.unitPrice.toLocaleString('fr-FR')} GNF/L
+                      {p.name} - 2 pistolets
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Pistolet utilisé :</label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-semibold outline-none focus:border-red-500"
+                  value={selectedNozzle}
+                  onChange={(e) => {
+                    const key = e.target.value as NozzleKey;
+                    setSelectedNozzle(key);
+                    const nozzle = key === 'P2' ? activePump?.nozzle2 : activePump?.nozzle1;
+                    if (nozzle) {
+                      setStartIndexInput(String(nozzle.startIndex));
+                      setEndIndexInput(String(nozzle.endIndex));
+                    }
+                  }}
+                >
+                  <option value="P1">Pistolet 1 — {activePump?.nozzle1?.fuelType || 'ESSENCE'} — {activePump?.nozzle1?.unitPrice.toLocaleString('fr-FR') || '12000'} GNF/L</option>
+                  <option value="P2">Pistolet 2 — {activePump?.nozzle2?.fuelType || 'GAZOIL'} — {activePump?.nozzle2?.unitPrice.toLocaleString('fr-FR') || '12000'} GNF/L</option>
                 </select>
               </div>
 
@@ -400,6 +454,62 @@ export default function CarburantsPage() {
                 />
               </div>
 
+              {/* Crédit abonné pendant la tournée */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+                <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wide">Abonné crédité (tournée)</div>
+                <select
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold outline-none focus:border-amber-500"
+                  value={subscriberMode}
+                  onChange={(e) => setSubscriberMode(e.target.value as 'NONE' | 'EXISTING' | 'NEW')}
+                >
+                  <option value="NONE">Aucun abonné</option>
+                  <option value="EXISTING">Abonné existant</option>
+                  <option value="NEW">Nouvel abonné</option>
+                </select>
+
+                {subscriberMode === 'EXISTING' && subscribers.filter(s => isGlobal || s.stationId === currentStation.id).length > 0 && (
+                  <select
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
+                    value={tourSubscriberId}
+                    onChange={(e) => setTourSubscriberId(e.target.value)}
+                  >
+                    {subscribers.filter(s => isGlobal || s.stationId === currentStation.id).map((s) => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.code}) — Crédit {s.currentCredit.toLocaleString('fr-FR')} GNF</option>
+                    ))}
+                  </select>
+                )}
+
+                {subscriberMode === 'NEW' && (
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nom du nouvel abonné"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
+                      value={newTourSubName}
+                      onChange={(e) => setNewTourSubName(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Téléphone"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
+                      value={newTourSubPhone}
+                      onChange={(e) => setNewTourSubPhone(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Adresse"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
+                      value={newTourSubAddress}
+                      onChange={(e) => setNewTourSubAddress(e.target.value)}
+                    />
+                    <div className="text-[10px] text-emerald-400">
+                      {soldLiters.toLocaleString('fr-FR')} L × {(activeNozzle?.unitPrice || 12000).toLocaleString('fr-FR')} GNF = {totalAmount.toLocaleString('fr-FR')} GNF crédités automatiquement
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
                 <div className="flex justify-between text-slate-400">
                   <span>Volume Net Vendu :</span>
@@ -407,7 +517,7 @@ export default function CarburantsPage() {
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Prix Unitaire Réglementé :</span>
-                  <span className="font-mono text-slate-300">{activePump?.unitPrice.toLocaleString('fr-FR')} GNF / L</span>
+                  <span className="font-mono text-slate-300">{(activeNozzle?.unitPrice || activePump?.unitPrice || 12000).toLocaleString('fr-FR')} GNF / L</span>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-slate-800 text-sm font-black">
                   <span className="text-slate-300">Recette Totale à Recouvrer :</span>
@@ -435,41 +545,43 @@ export default function CarburantsPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filteredPumps.map((p) => {
-                  const pSold = Math.max(0, p.endIndex - p.startIndex - p.returnToTank);
-                  const pRev = pSold * p.unitPrice;
-
-                  return (
-                    <div key={p.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-sm text-white">{p.name}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${(p.fuelType === 'SUPER' || p.fuelType === 'ESSENCE') ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
-                          {p.fuelType === 'SUPER' ? 'ESSENCE' : p.fuelType}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1 text-xs text-slate-400">
-                        <div className="flex justify-between">
-                          <span>Index Début :</span>
-                          <span className="font-mono text-slate-300">{p.startIndex.toLocaleString('fr-FR')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Index Fin :</span>
-                          <span className="font-mono text-slate-300">{p.endIndex.toLocaleString('fr-FR')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Retour Cuve :</span>
-                          <span className="font-mono text-amber-400">{p.returnToTank.toLocaleString('fr-FR')} L</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                        <span className="text-xs text-slate-400">Ventes : <strong className="text-white">{pSold.toLocaleString('fr-FR')} L</strong></span>
-                        <span className="text-xs font-black text-red-400">{pRev.toLocaleString('fr-FR')} GNF</span>
-                      </div>
+                {filteredPumps.map((p) => (
+                  <div key={p.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-sm text-white">{p.name}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">2 PISTOLETS</span>
                     </div>
-                  );
-                })}
+
+                    {([['Pistolet 1', p.nozzle1], ['Pistolet 2', p.nozzle2]] as const).map(([label, nozzle]) => {
+                      if (!nozzle) return null;
+                      const sold = Math.max(0, nozzle.endIndex - nozzle.startIndex - nozzle.returnToTank);
+                      return (
+                        <div key={label} className="bg-slate-900/60 border border-slate-800 rounded-lg p-2.5 space-y-1 text-xs text-slate-400">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-amber-400">{label}</span>
+                            <span className="font-bold text-white">{formatFuelName(nozzle.fuelType)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Index Départ :</span>
+                            <span className="font-mono text-slate-300">{nozzle.startIndex.toLocaleString('fr-FR')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Index Fin :</span>
+                            <span className="font-mono text-slate-300">{nozzle.endIndex.toLocaleString('fr-FR')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Retour Cuve :</span>
+                            <span className="font-mono text-amber-400">{nozzle.returnToTank.toLocaleString('fr-FR')} L</span>
+                          </div>
+                          <div className="flex justify-between pt-1 border-t border-slate-800">
+                            <span>Ventes : <strong className="text-white">{sold.toLocaleString('fr-FR')} L</strong></span>
+                            <span className="font-black text-red-400">{(sold * nozzle.unitPrice).toLocaleString('fr-FR')} GNF</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -742,6 +854,91 @@ export default function CarburantsPage() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* TAB CONTENT: Bascule des cuves / vannes */}
+      {activeTab === 'BASCULE' && (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-2">
+            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+              <Droplets className="w-5 h-5 text-emerald-400" />
+              Bascule des Cuves — Point de rencontre des pompes
+            </h3>
+            <p className="text-xs text-slate-400">
+              Plusieurs cuves du même carburant alimentent toutes les pompes. Lorsque la cuve en service est épuisée,
+              le technicien ouvre la vanne de la cuve suivante : les pistolets restent raccordés au même groupe.
+            </p>
+          </div>
+
+          {Array.from(new Set(filteredTanks.map(t => t.basculeGroup || (t.fuelType === 'GAZOIL' ? 'GAZOIL' : 'ESSENCE')))).map((group) => {
+            const groupTanks = filteredTanks.filter(t => (t.basculeGroup || (t.fuelType === 'GAZOIL' ? 'GAZOIL' : 'ESSENCE')) === group);
+            return (
+              <div key={group} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+                <h4 className="font-extrabold text-white text-sm uppercase tracking-wide">
+                  Groupe {group === 'ESSENCE' ? 'Essence' : 'Gazoil'} ({groupTanks.length} cuves)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {groupTanks.map((tank) => {
+                    const isOpen = tank.valveStatus !== 'CLOSED';
+                    return (
+                      <div key={tank.id} className={`p-4 rounded-xl border space-y-2 ${isOpen ? 'bg-emerald-950/40 border-emerald-700' : 'bg-slate-950 border-slate-800'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white text-sm">{tank.code}</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${isOpen ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                            {isOpen ? 'VANNE OUVERTE' : 'VANNE FERMÉE'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Stock disponible : <strong className="text-white font-mono">{tank.currentStock.toLocaleString('fr-FR')} L</strong>
+                        </div>
+                        <div className="text-[11px] text-slate-400">Pompes / pistolets desservis :</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {filteredPumps.length === 0 && (
+                            <span className="text-[11px] text-slate-500">Aucune pompe configurée</span>
+                          )}
+                          {filteredPumps.map((pump) => {
+                            const linked = tank.suppliesPumpIds.includes(pump.id);
+                            return (
+                              <label
+                                key={pump.id}
+                                className={`px-2 py-1 rounded border text-[10px] font-bold cursor-pointer transition ${
+                                  linked
+                                    ? 'bg-emerald-500/20 border-emerald-600 text-emerald-300'
+                                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={linked}
+                                  onChange={(e) => {
+                                    const next = e.target.checked
+                                      ? [...tank.suppliesPumpIds, pump.id]
+                                      : tank.suppliesPumpIds.filter(id => id !== pump.id);
+                                    updateTankPumpLinks(tank.id, next);
+                                  }}
+                                />
+                                {pump.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isOpen}
+                          onClick={() => switchTankValve(tank.id)}
+                          className={`w-full py-2 rounded-lg text-xs font-bold transition ${isOpen ? 'bg-emerald-500/20 text-emerald-300 cursor-default' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+                        >
+                          {isOpen ? 'Cuve en service' : 'Ouvrir cette vanne (bascule)'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

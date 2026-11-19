@@ -62,6 +62,9 @@ export default function AbonnesPage() {
   const [newPhone, setNewPhone] = useState<string>('+224 ');
   const [newAddress, setNewAddress] = useState<string>('Conakry');
   const [newInitialAdvance, setNewInitialAdvance] = useState<string>('0');
+  const [newCreditLiters, setNewCreditLiters] = useState<string>('0');
+  const [newUnitPrice, setNewUnitPrice] = useState<string>('12000');
+  const computedCreditAmount = (parseFloat(newCreditLiters) || 0) * (parseFloat(newUnitPrice) || 12000);
   // Sélecteur de station pour le Super Admin
   const [newSubStation, setNewSubStation] = useState<string>(currentStation?.id || stations[0]?.id || '');
 
@@ -136,11 +139,13 @@ export default function AbonnesPage() {
       address: newAddress,
       stationId: targetStationId || undefined,
       initialAdvance: parseFloat(newInitialAdvance) || 0,
-      initialCredit: 0
+      initialCredit: computedCreditAmount,
+      creditLiters: parseFloat(newCreditLiters) || 0
     });
 
     notifySuccess(`Client / Abonné "${sub.name}" (${sub.code}) enregistré avec succès !`);
     setNewName('');
+    setNewCreditLiters('0');
     setActiveTab('PAYMENT');
   };
 
@@ -544,6 +549,35 @@ export default function AbonnesPage() {
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setNewInitialAdvance(e.target.value.replace(/[^0-9.]/g, ''))}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Nombre de litres crédités :</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="ex: 500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono font-bold outline-none focus:border-amber-500"
+                    value={newCreditLiters}
+                    onChange={(e) => setNewCreditLiters(e.target.value.replace(/[^0-9.]/g, ''))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Prix unitaire (GNF/L) :</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono font-bold outline-none focus:border-amber-500"
+                    value={newUnitPrice}
+                    onChange={(e) => setNewUnitPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/50 flex items-center justify-between">
+                <span className="text-emerald-300 font-bold">Montant du crédit (calculé automatiquement) :</span>
+                <span className="font-black font-mono text-emerald-400 text-base">{computedCreditAmount.toLocaleString('fr-FR')} GNF</span>
               </div>
 
               <button

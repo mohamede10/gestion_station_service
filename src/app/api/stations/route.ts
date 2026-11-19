@@ -65,6 +65,22 @@ export async function GET() {
   }
 }
 
+// Le front utilise ESSENCE / SUPER / GAZOIL ; la base conserve SUPER pour
+// compatibilité historique mais connaît désormais ESSENCE.
+type DbFuelType = 'ESSENCE' | 'SUPER' | 'GAZOIL';
+
+function toDbFuelType(value: any, fallback: DbFuelType = 'ESSENCE'): DbFuelType {
+  const normalized = String(value || '').toUpperCase();
+  if (normalized === 'GAZOIL') return 'GAZOIL';
+  if (normalized === 'SUPER') return 'SUPER';
+  if (normalized === 'ESSENCE') return 'ESSENCE';
+  return fallback;
+}
+
+function basculeGroup(fuelType: DbFuelType): string {
+  return fuelType === 'GAZOIL' ? 'GAZOIL' : 'ESSENCE';
+}
+
 // Génère le prochain code station au format ST-001, ST-002, ST-003, ...
 async function generateNextStationCode(): Promise<string> {
   const existing = await prisma.station.findMany({ select: { code: true } });
@@ -118,45 +134,108 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Créer les cuves
+    // 2. Créer les cuves (première cuve de chaque groupe en service)
     const createdTanks: any[] = [];
     for (let i = 0; i < tanks.length; i++) {
       const t = tanks[i];
+      const fuelType = toDbFuelType(t.fuelType);
+      const group = basculeGroup(fuelType);
       const tank = await prisma.tank.create({
         data: {
           stationId: station.id,
-          code: t.code || `CUVE 0${i + 1} - ${t.fuelType}`,
-          fuelType: t.fuelType === 'GAZOIL' ? 'GAZOIL' : 'SUPER',
+          code: t.code || `CUVE 0${i + 1} - ${fuelType}`,
+          fuelType,
           capacity: Number(t.capacity) || 45000,
           initialStock: Number(t.initialStock) || 0,
           currentStock: Number(t.initialStock) || 0,
+          valveStatus: createdTanks.some((tk: any) => basculeGroup(tk.fuelType) === group) ? 'CLOSED' : 'OPEN',
+          basculeGroup: group,
+          suppliesPumpIds: [],
         },
       });
       createdTanks.push(tank);
     }
 
-    // 3. Créer les pompes
+    // 3. Créer les pompes à deux pistolets (index et prix indépendants)
+    const resolveTankId = (
+      spec: { tankIndex?: number; tankId?: string; fuelType?: any } | undefined,
+      legacy: { tankIndex?: number; tankId?: string; fuelType?: any },
+      fallbackFuelType: DbFuelType
+    ): string | undefined => {
+      if (spec?.tankIndex !== undefined && createdTanks[spec.tankIndex]) {
+        return createdTanks[spec.tankIndex].id;
+      }
+      if (spec?.tankId && createdTanks.some((tk: any) => tk.id === spec.tankId)) {
+        return spec.tankId;
+      }
+      if (legacy.tankIndex !== undefined && createdTanks[legacy.tankIndex]) {
+        return createdTanks[legacy.tankIndex].id;
+      }
+      if (legacy.tankId && createdTanks.some((tk: any) => tk.id === legacy.tankId)) {
+        return legacy.tankId;
+      }
+      const wantedGroup = basculeGroup(toDbFuelType(spec?.fuelType || legacy.fuelType, fallbackFuelType));
+      return createdTanks.find((tk: any) => basculeGroup(tk.fuelType) === wantedGroup)?.id
+        || createdTanks[0]?.id;
+    };
+
     const createdPumps: any[] = [];
     for (let i = 0; i < pumps.length; i++) {
       const p = pumps[i];
-      let assignedTankId = createdTanks[0]?.id;
-      if (p.tankIndex !== undefined && createdTanks[p.tankIndex]) {
-        assignedTankId = createdTanks[p.tankIndex].id;
-      } else if (p.fuelType) {
-        const match = createdTanks.find((tk) => tk.fuelType === p.fuelType);
-        if (match) assignedTankId = match.id;
-      }
+      const legacyFuel = toDbFuelType(p.fuelType, 'ESSENCE');
+      const n1Fuel = toDbFuelType(p.pistolet1?.fuelType || p.fuelType, legacyFuel);
+      const n1TankId = resolveTankId(p.pistolet1, p, n1Fuel);
+      const otherGroup = basculeGroup(n1Fuel) === 'GAZOIL' ? 'ESSENCE' : 'GAZOIL';
+      const defaultN2Fuel: DbFuelType = createdTanks.some((tk: any) => basculeGroup(tk.fuelType) === otherGroup)
+        ? (otherGroup === 'GAZOIL' ? 'GAZOIL' : 'ESSENCE')
+        : n1Fuel;
+      const n2Fuel = toDbFuelType(p.pistolet2?.fuelType, defaultN2Fuel);
+      const n2TankId = resolveTankId(
+        p.pistolet2,
+        { tankIndex: undefined, tankId: undefined, fuelType: defaultN2Fuel },
+        defaultN2Fuel
+      );
 
-      if (assignedTankId) {
+      if (n1TankId) {
         const pump = await prisma.pump.create({
           data: {
             stationId: station.id,
-            tankId: assignedTankId,
+            tankId: n1TankId,
+            fuelType: n1Fuel,
             name: p.name || `Pompe 0${i + 1}`,
-            fuelType: p.fuelType === 'GAZOIL' ? 'GAZOIL' : 'SUPER',
+            pistolet1FuelType: n1Fuel,
+            pistolet1TankId: n1TankId,
+            pistolet1StartIndex: Number(p.pistolet1?.startIndex ?? p.startIndex) || 0,
+            pistolet1EndIndex: Number(p.pistolet1?.endIndex ?? p.endIndex) || 0,
+            pistolet1ReturnToTank: Number(p.pistolet1?.returnToTank ?? p.returnToTank) || 0,
+            pistolet1UnitPrice: Number(p.pistolet1?.unitPrice ?? p.unitPrice) || 12000,
+            pistolet2FuelType: n2Fuel,
+            pistolet2TankId: n2TankId || null,
+            pistolet2StartIndex: Number(p.pistolet2?.startIndex) || 0,
+            pistolet2EndIndex: Number(p.pistolet2?.endIndex) || 0,
+            pistolet2ReturnToTank: Number(p.pistolet2?.returnToTank) || 0,
+            pistolet2UnitPrice: Number(p.pistolet2?.unitPrice ?? p.unitPrice) || 12000,
           },
         });
         createdPumps.push(pump);
+
+        // La cuve sait quelles pommes/pistolets elle alimente.
+        for (const tankId of new Set([n1TankId, n2TankId].filter(Boolean) as string[])) {
+          const tank = createdTanks.find((tk: any) => tk.id === tankId);
+          if (tank && !tank.suppliesPumpIds.includes(pump.id)) {
+            tank.suppliesPumpIds.push(pump.id);
+          }
+        }
+      }
+    }
+
+    // Persistance des liens cuves ↔ pompes après création des pompes.
+    for (const tank of createdTanks) {
+      if (tank.suppliesPumpIds.length > 0) {
+        await prisma.tank.update({
+          where: { id: tank.id },
+          data: { suppliesPumpIds: tank.suppliesPumpIds },
+        });
       }
     }
 
@@ -190,6 +269,8 @@ export async function POST(req: Request) {
             transportAllowance: 150000,
             livingAllowance: 150000,
             housingAllowance: 200000,
+            prime: Number(emp.prime) || 0,
+            primeLabel: emp.primeLabel || null,
             status: 'ACTIVE',
           },
         });

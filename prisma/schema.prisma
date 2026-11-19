@@ -46,6 +46,10 @@ model Tank {
   capacity     Float
   initialStock Float          @default(0)
   currentStock Float          @default(0)
+  // Bascule / vannes : une seule cuve du groupe est en service à la fois.
+  valveStatus     String   @default("OPEN")
+  basculeGroup    String   @default("ESSENCE")
+  suppliesPumpIds String[] @default([])
   createdAt    DateTime       @default(now())
   pumps        Pump[]
   station      Station        @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -77,9 +81,27 @@ model TankDipstick {
 model Pump {
   id        String        @id @default(dbgenerated("(gen_random_uuid())::text"))
   stationId String
+  // Miroir du pistolet 1, conservé pour compatibilité avec les anciens écrans.
   tankId    String
-  name      String
   fuelType  FuelType
+  name      String
+
+  // Pistolet 1 (essence ou gazoil) : index, retours et prix indépendants.
+  pistolet1FuelType     FuelType @default(SUPER)
+  pistolet1TankId       String?
+  pistolet1StartIndex   Float    @default(0)
+  pistolet1EndIndex     Float    @default(0)
+  pistolet1ReturnToTank Float    @default(0)
+  pistolet1UnitPrice    Float    @default(12000)
+
+  // Pistolet 2 : peut servir l'autre carburant avec ses propres index.
+  pistolet2FuelType     FuelType @default(GAZOIL)
+  pistolet2TankId       String?
+  pistolet2StartIndex   Float    @default(0)
+  pistolet2EndIndex     Float    @default(0)
+  pistolet2ReturnToTank Float    @default(0)
+  pistolet2UnitPrice    Float    @default(12000)
+
   station   Station       @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   tank      Tank          @relation(fields: [tankId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   readings  PumpReading[]
@@ -132,6 +154,7 @@ model Subscriber {
   address        String?
   currentAdvance Float               @default(0)
   currentCredit  Float               @default(0)
+  creditLiters   Float               @default(0)
   createdAt      DateTime            @default(now())
   invoices       Invoice[]
   payments       Payment[]
@@ -205,6 +228,8 @@ model Employee {
   transportAllowance Float              @default(0)
   livingAllowance    Float              @default(0)
   housingAllowance   Float              @default(0)
+  prime              Float              @default(0)
+  primeLabel         String?
   status             String             @default("ACTIVE")
   createdAt          DateTime           @default(now())
   station            Station            @relation(fields: [stationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -244,6 +269,8 @@ model PayrollSlip {
   monthLoans        Float    @default(0)
   shortagesDeducted Float    @default(0)
   reimbursements    Float    @default(0)
+  prime             Float    @default(0)
+  primeLabel        String?
   netPayable        Float
   generatedAt       DateTime @default(now())
   employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -269,6 +296,7 @@ enum Role {
 }
 
 enum FuelType {
+  ESSENCE
   SUPER
   GAZOIL
 }
