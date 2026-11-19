@@ -230,55 +230,126 @@ export default function Dashboard() {
         {/* Left Col (2 Columns) */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Section: Cuves & Taux de Remplissage */}
+          {/* Section: Cuves & Taux de Remplissage — Visualiseur Cylindrique */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-extrabold text-white text-base flex items-center gap-2">
                 <Droplets className="w-5 h-5 text-amber-400" />
-                Niveau des Cuves & État Physique des Stocks ({filteredTanks.length} Cuves)
+                Niveaux Cuves en Temps Réel ({filteredTanks.length} Cuves)
               </h3>
               <Link href="/carburants" className="text-xs font-bold text-red-400 hover:text-red-300">
                 Gérer Cuves →
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {filteredTanks.map((tank) => {
-                const fillPercentage = Math.min(100, Math.round((tank.currentStock / tank.capacity) * 100));
+                const fillPercentage = Math.min(100, Math.max(0, Math.round((tank.currentStock / tank.capacity) * 100)));
                 const gap = tank.physicalStock - tank.currentStock;
+                const isEssence = tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE';
 
                 return (
-                  <div key={tank.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div key={tank.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4 hover:border-slate-700 transition-all">
+                    
+                    {/* En-tête cuve */}
                     <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-sm text-white">{tank.code}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">
-                        {tank.fuelType === 'SUPER' ? 'ESSENCE' : tank.fuelType}
+                      <div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${
+                          isEssence
+                            ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                            : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                        }`}>
+                          {tank.fuelType === 'SUPER' ? 'ESSENCE' : tank.fuelType}
+                        </span>
+                        <h4 className="font-black text-white text-base mt-1">{tank.code}</h4>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        EN SERVICE
                       </span>
                     </div>
 
-                    <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${(tank.fuelType === 'SUPER' || tank.fuelType === 'ESSENCE') ? 'bg-gradient-to-r from-red-600 to-rose-400' : 'bg-gradient-to-r from-amber-500 to-yellow-400'}`} 
-                        style={{ width: `${fillPercentage}%` }}
-                      ></div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                      <div>
-                        <span>Théorique :</span>
-                        <strong className="block text-white font-mono">{tank.currentStock.toLocaleString('fr-FR')} L</strong>
+                    {/* Visualiseur réservoir cylindrique vertical */}
+                    <div className="flex items-center gap-5">
+                      {/* Cylindre vertical */}
+                      <div className="relative w-20 h-40 rounded-2xl border-4 border-slate-700 bg-slate-900/90 overflow-hidden flex flex-col justify-end p-1 shadow-inner shrink-0">
+                        {/* Graduations */}
+                        <div className="absolute inset-0 flex flex-col justify-between py-2 px-1 pointer-events-none z-20 opacity-30 text-[8px] font-mono text-white">
+                          <span>100%</span>
+                          <span>75%</span>
+                          <span>50%</span>
+                          <span>25%</span>
+                          <span>0%</span>
+                        </div>
+                        {/* Niveau liquide animé */}
+                        <div
+                          className={`w-full rounded-xl transition-all duration-1000 relative overflow-hidden shadow-lg ${
+                            isEssence
+                              ? 'bg-gradient-to-t from-red-700 via-red-600 to-rose-400 shadow-red-900/50'
+                              : 'bg-gradient-to-t from-amber-600 via-amber-500 to-yellow-300 shadow-amber-900/50'
+                          }`}
+                          style={{ height: `${Math.max(6, fillPercentage)}%` }}
+                        >
+                          {/* Vague de surface */}
+                          <div className="absolute top-0 left-0 right-0 h-2 bg-white/30 rounded-full blur-[1px] animate-pulse"></div>
+                        </div>
+                        {/* Pourcentage overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                          <span className="text-lg font-black font-mono text-white drop-shadow-md">{fillPercentage}%</span>
+                        </div>
                       </div>
-                      <div>
-                        <span>Jauge Règle :</span>
-                        <strong className="block text-amber-300 font-mono">{tank.physicalStock.toLocaleString('fr-FR')} L</strong>
-                      </div>
-                    </div>
 
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                      <span>Écart / Coulage :</span>
-                      <span className={`font-bold font-mono ${gap < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {gap > 0 ? `+${gap} L` : `${gap} L`}
-                      </span>
+                      {/* Métriques */}
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Volume Disponible</div>
+                          <div className="text-2xl font-black text-white font-mono mt-0.5">
+                            {tank.currentStock.toLocaleString('fr-FR')}
+                            <span className="text-xs text-slate-400 font-bold ml-1">L</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Capacité : <strong className="text-slate-300">{tank.capacity.toLocaleString('fr-FR')} L</strong>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
+                            <span className="text-[10px] text-slate-400 font-bold block">Jauge Physique</span>
+                            <span className="text-sm font-black text-amber-300 font-mono">
+                              {tank.physicalStock.toLocaleString('fr-FR')} L
+                            </span>
+                          </div>
+                          <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800/80">
+                            <span className="text-[10px] text-slate-400 font-bold block">Écart / Coulage</span>
+                            <span className={`text-sm font-black font-mono ${gap < 0 ? 'text-red-400' : gap > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                              {gap > 0 ? `+${gap}` : gap} L
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Barre de niveau horizontal secondaire */}
+                        <div>
+                          <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                            <span>Niveau</span>
+                            <span className="font-mono font-bold text-slate-300">{fillPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ${
+                                isEssence
+                                  ? 'bg-gradient-to-r from-red-600 to-rose-400'
+                                  : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                              } ${fillPercentage < 20 ? 'animate-pulse' : ''}`}
+                              style={{ width: `${fillPercentage}%` }}
+                            ></div>
+                          </div>
+                          {fillPercentage < 20 && (
+                            <span className="text-[10px] text-red-400 font-bold flex items-center gap-1 mt-1">
+                              <AlertTriangle className="w-3 h-3" /> Stock bas — Prévoir livraison
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );

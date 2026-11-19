@@ -476,109 +476,117 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       console.warn('Failed to load local storage state:', e);
     }
 
-    // Synchronisation automatique avec la base Supabase en tâche de fond
+    // Synchronisation avec la base Supabase — NON DESTRUCTIVE :
+    // La BD sert uniquement à ajouter les entités absentes du localStorage.
+    // Les stocks/données modifiées en session sont TOUJOURS prioritaires (localStorage).
     fetch('/api/stations')
       .then(res => res.json())
       .then(data => {
-        if (data.success && Array.isArray(data.stations)) {
-          if (data.stations.length === 0) {
-            setStations([]);
-            setCurrentStation(null);
-            return;
+        if (!data.success || !Array.isArray(data.stations)) return;
+
+        // Si la BD ne retourne aucune station, on garde le localStorage intact
+        if (data.stations.length === 0) return;
+
+        // Ajouter les stations BD absentes du localStorage (sans supprimer)
+        setStations(prev => {
+          const existingIds = new Set(prev.map(s => s.id));
+          const newOnes = data.stations
+            .filter((st: any) => !existingIds.has(st.id))
+            .map((st: any) => ({
+              id: st.id,
+              code: st.code,
+              name: st.name,
+              city: st.city
+            }));
+          return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+        });
+
+        const dbTanks: TankMock[] = [];
+        const dbPumps: PumpMock[] = [];
+        const dbEmployees: EmployeeMock[] = [];
+
+        data.stations.forEach((st: any) => {
+          if (st.tanks) {
+            st.tanks.forEach((t: any) => {
+              dbTanks.push({
+                id: t.id,
+                stationId: t.stationId,
+                code: t.code,
+                fuelType: t.fuelType,
+                capacity: t.capacity,
+                initialStock: t.initialStock,
+                // On garde le stock BD uniquement si > 0, sinon on laisse le localStorage gérer
+                currentStock: t.currentStock,
+                physicalStock: t.currentStock,
+                lastDipstickDate: new Date().toISOString().substring(0, 16)
+              });
+            });
           }
-          setStations(prev => {
-            const existingIds = new Set(prev.map(s => s.id));
-            const newOnes = data.stations
-              .filter((st: any) => !existingIds.has(st.id))
-              .map((st: any) => ({
-                id: st.id,
-                code: st.code,
-                name: st.name,
-                city: st.city
-              }));
-            return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+          if (st.pumps) {
+            st.pumps.forEach((p: any) => {
+              dbPumps.push({
+                id: p.id,
+                stationId: p.stationId,
+                tankId: p.tankId,
+                name: p.name,
+                fuelType: p.fuelType,
+                startIndex: 0,
+                endIndex: 0,
+                returnToTank: 0,
+                unitPrice: 12000
+              });
+            });
+          }
+          if (st.employees) {
+            st.employees.forEach((e: any) => {
+              dbEmployees.push({
+                id: e.id,
+                stationId: e.stationId,
+                fullName: e.fullName,
+                jobTitle: e.jobTitle,
+                baseSalary: e.baseSalary,
+                transportAllowance: e.transportAllowance,
+                livingAllowance: e.livingAllowance,
+                housingAllowance: e.housingAllowance,
+                prime: 0,
+                primeLabel: '',
+                shortages: 0,
+                loans: 0,
+                netSalary: e.baseSalary
+              });
+            });
+          }
+        });
+
+        // Cuves : n'ajouter que les cuves absentes du localStorage
+        // Les cuves existantes conservent leur currentStock localStorage (prioritaire)
+        if (dbTanks.length > 0) {
+          setTanks(prev => {
+            const localIds = new Set(prev.map(t => t.id));
+            const additions = dbTanks.filter(t => !localIds.has(t.id));
+            return additions.length > 0 ? [...prev, ...additions] : prev;
           });
+        }
 
-          const dbTanks: TankMock[] = [];
-          const dbPumps: PumpMock[] = [];
-          const dbEmployees: EmployeeMock[] = [];
-
-          data.stations.forEach((st: any) => {
-            if (st.tanks) {
-              st.tanks.forEach((t: any) => {
-                dbTanks.push({
-                  id: t.id,
-                  stationId: t.stationId,
-                  code: t.code,
-                  fuelType: t.fuelType,
-                  capacity: t.capacity,
-                  initialStock: t.initialStock,
-                  currentStock: t.currentStock,
-                  physicalStock: t.currentStock,
-                  lastDipstickDate: new Date().toISOString().substring(0, 16)
-                });
-              });
-            }
-            if (st.pumps) {
-              st.pumps.forEach((p: any) => {
-                dbPumps.push({
-                  id: p.id,
-                  stationId: p.stationId,
-                  tankId: p.tankId,
-                  name: p.name,
-                  fuelType: p.fuelType,
-                  startIndex: 0,
-                  endIndex: 0,
-                  returnToTank: 0,
-                  unitPrice: 12000
-                });
-              });
-            }
-            if (st.employees) {
-              st.employees.forEach((e: any) => {
-                dbEmployees.push({
-                  id: e.id,
-                  stationId: e.stationId,
-                  fullName: e.fullName,
-                  jobTitle: e.jobTitle,
-                  baseSalary: e.baseSalary,
-                  transportAllowance: e.transportAllowance,
-                  livingAllowance: e.livingAllowance,
-                  housingAllowance: e.housingAllowance,
-                  prime: 0,
-                  primeLabel: '',
-                  shortages: 0,
-                  loans: 0,
-                  netSalary: e.baseSalary
-                });
-              });
-            }
+        // Pompes : même logique non-destructive
+        if (dbPumps.length > 0) {
+          setPumps(prev => {
+            const localIds = new Set(prev.map(p => p.id));
+            const additions = dbPumps.filter(p => !localIds.has(p.id));
+            return additions.length > 0 ? [...prev, ...additions] : prev;
           });
+        }
 
-          if (dbTanks.length > 0) {
-            setTanks(prev => {
-              const ids = new Set(prev.map(t => t.id));
-              const additions = dbTanks.filter(t => !ids.has(t.id));
-              return additions.length > 0 ? [...prev, ...additions] : prev;
-            });
-          }
-          if (dbPumps.length > 0) {
-            setPumps(prev => {
-              const ids = new Set(prev.map(p => p.id));
-              const additions = dbPumps.filter(p => !ids.has(p.id));
-              return additions.length > 0 ? [...prev, ...additions] : prev;
-            });
-          }
-          if (dbEmployees.length > 0) {
-            setEmployees(prev => {
-              const ids = new Set(prev.map(e => e.id));
-              const additions = dbEmployees.filter(e => !ids.has(e.id));
-              return additions.length > 0 ? [...prev, ...additions] : prev;
-            });
-          }
+        // Employés : même logique non-destructive
+        if (dbEmployees.length > 0) {
+          setEmployees(prev => {
+            const localIds = new Set(prev.map(e => e.id));
+            const additions = dbEmployees.filter(e => !localIds.has(e.id));
+            return additions.length > 0 ? [...prev, ...additions] : prev;
+          });
         }
       })
-      .catch(err => console.warn('Sync stations with API:', err));
+      .catch(err => console.warn('Sync stations with API (non-bloquant):', err));
   }, []);
 
   // Sync to localStorage on change
