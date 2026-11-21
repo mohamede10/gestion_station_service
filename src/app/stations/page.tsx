@@ -1411,7 +1411,7 @@ export default function StationsPage() {
                                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
                                   >
                                     <option value="ESSENCE">Essence</option>
-                                    <option value="SUPER">Super</option>
+                                     {/* ================= STEP 3: POMPES DE DISTRIBUTION <option value="SUPER">Super</option>================= */}
                                     <option value="GAZOIL">Gazoil</option>
                                   </select>
                                 </div>
