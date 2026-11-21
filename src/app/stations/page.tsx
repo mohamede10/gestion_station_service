@@ -2,22 +2,22 @@
 
 import React, { useState } from 'react';
 import { useStation, CreateStationInput, UserRole } from '@/context/StationContext';
-import { 
-  Building2, 
-  Plus, 
-  ShieldCheck, 
-  MapPin, 
-  CheckCircle2, 
-  Fuel, 
-  Users, 
-  Coins, 
-  Trash2, 
-  Settings, 
-  ArrowRight, 
-  ArrowLeft, 
-  Droplets, 
-  Gauge, 
-  UserCheck, 
+import {
+  Building2,
+  Plus,
+  ShieldCheck,
+  MapPin,
+  CheckCircle2,
+  Fuel,
+  Users,
+  Coins,
+  Trash2,
+  Settings,
+  ArrowRight,
+  ArrowLeft,
+  Droplets,
+  Gauge,
+  UserCheck,
   X,
   Sparkles,
   Info,
@@ -60,14 +60,14 @@ function pumpDraft(
 }
 
 export default function StationsPage() {
-  const { 
-    stations, 
-    addStation, 
-    setCurrentStation, 
-    currentStation, 
-    tanks, 
-    pumps, 
-    employees, 
+  const {
+    stations,
+    addStation,
+    setCurrentStation,
+    currentStation,
+    tanks,
+    pumps,
+    employees,
     subscribers,
     users,
     addUser,
@@ -385,7 +385,7 @@ export default function StationsPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      
+
       {/* Top Banner */}
       <div className="bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
         <div>
@@ -512,13 +512,12 @@ export default function StationsPage() {
               const totalStock = stTanks.reduce((acc, t) => acc + t.currentStock, 0);
 
               return (
-                <div 
-                  key={st.id} 
-                  className={`rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between ${
-                    isSelected 
-                      ? 'bg-slate-900 border-red-500 shadow-xl shadow-red-950/40 ring-2 ring-red-500/20' 
+                <div
+                  key={st.id}
+                  className={`rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between ${isSelected
+                      ? 'bg-slate-900 border-red-500 shadow-xl shadow-red-950/40 ring-2 ring-red-500/20'
                       : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 shadow-lg'
-                  }`}
+                    }`}
                 >
                   {/* Station Card Header */}
                   <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
@@ -526,7 +525,7 @@ export default function StationsPage() {
                       <div>
                         <h3 className="font-extrabold text-base text-white tracking-tight leading-tight">{st.name}</h3>
                         <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                          <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" /> 
+                          <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
                           <span className="font-medium text-slate-300">{st.city}</span>
                         </div>
                       </div>
@@ -544,7 +543,7 @@ export default function StationsPage() {
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full"
                           style={{ width: `${totalCap > 0 ? Math.min(100, Math.round((totalStock / totalCap) * 100)) : 0}%` }}
                         />
@@ -586,11 +585,10 @@ export default function StationsPage() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setCurrentStation(st)}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                          isSelected 
-                            ? 'bg-red-600 text-white shadow-md shadow-red-950/50' 
+                        className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${isSelected
+                            ? 'bg-red-600 text-white shadow-md shadow-red-950/50'
                             : 'bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/40'
-                        }`}
+                          }`}
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>{isSelected ? 'Station Active' : 'Activer'}</span>
@@ -630,31 +628,28 @@ export default function StationsPage() {
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setAdminTab('GERANTS')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                adminTab === 'GERANTS'
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${adminTab === 'GERANTS'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/50'
                   : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
-              }`}
+                }`}
             >
               <KeyRound className="w-3.5 h-3.5" /> Gérants & Comptes d'Accès ({users.filter(u => u.role !== 'SUPER_ADMIN').length})
             </button>
             <button
               onClick={() => setAdminTab('POMPISTES')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                adminTab === 'POMPISTES'
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${adminTab === 'POMPISTES'
                   ? 'bg-amber-600 text-white shadow-lg shadow-amber-950/50'
                   : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
-              }`}
+                }`}
             >
               <HardHat className="w-3.5 h-3.5" /> Pompistes & Équipes ({employees.length})
             </button>
             <button
               onClick={() => setAdminTab('ABONNES')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                adminTab === 'ABONNES'
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${adminTab === 'ABONNES'
                   ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/50'
                   : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
-              }`}
+                }`}
             >
               <CreditCard className="w-3.5 h-3.5" /> Abonnés & Entreprises ({subscribers.length})
             </button>
@@ -1070,7 +1065,7 @@ export default function StationsPage() {
       {isWizardOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh]">
-            
+
             {/* Modal Header */}
             <div className="bg-slate-950 border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between">
               <div>
@@ -1093,36 +1088,32 @@ export default function StationsPage() {
             <div className="bg-slate-950/60 border-b border-slate-800 px-4 py-3 flex items-center justify-between text-xs font-bold overflow-x-auto">
               <button
                 onClick={() => setWizardStep(1)}
-                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${
-                  wizardStep === 1 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
-                }`}
+                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${wizardStep === 1 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
+                  }`}
               >
                 <span className="w-5 h-5 rounded-full bg-slate-800 text-center leading-5 text-[11px]">1</span>
                 Identité Station
               </button>
               <button
                 onClick={() => setWizardStep(2)}
-                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${
-                  wizardStep === 2 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
-                }`}
+                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${wizardStep === 2 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
+                  }`}
               >
                 <span className="w-5 h-5 rounded-full bg-slate-800 text-center leading-5 text-[11px]">2</span>
                 Cuves ({customTanks.length})
               </button>
               <button
                 onClick={() => setWizardStep(3)}
-                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${
-                  wizardStep === 3 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
-                }`}
+                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${wizardStep === 3 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
+                  }`}
               >
                 <span className="w-5 h-5 rounded-full bg-slate-800 text-center leading-5 text-[11px]">3</span>
                 Pompes ({customPumps.length})
               </button>
               <button
                 onClick={() => setWizardStep(4)}
-                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${
-                  wizardStep === 4 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
-                }`}
+                className={`flex items-center gap-2 pb-1 border-b-2 transition whitespace-nowrap px-2 ${wizardStep === 4 ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-400'
+                  }`}
               >
                 <span className="w-5 h-5 rounded-full bg-slate-800 text-center leading-5 text-[11px]">4</span>
                 Gérant & Équipe
@@ -1131,7 +1122,7 @@ export default function StationsPage() {
 
             {/* Modal Body with Scroll */}
             <div className="p-5 overflow-y-auto space-y-5 text-xs flex-1">
-              
+
               {/* ================= STEP 1: IDENTITÉ STATION ================= */}
               {wizardStep === 1 && (
                 <div className="space-y-4">
@@ -1223,7 +1214,7 @@ export default function StationsPage() {
                             <Droplets className="w-4 h-4 text-amber-400" />
                             Cuve #{idx + 1}
                           </span>
-                          
+
                           {customTanks.length > 1 && (
                             <button
                               type="button"
@@ -1308,12 +1299,12 @@ export default function StationsPage() {
                     type="button"
                     onClick={() => {
                       setCustomTanks(prev => [
-                        ...prev, 
-                        { 
-                          code: `CUVE 0${prev.length + 1} - GAZOIL`, 
-                          fuelType: 'GAZOIL', 
-                          capacity: '45000', 
-                          initialStock: '10000' 
+                        ...prev,
+                        {
+                          code: `CUVE 0${prev.length + 1} - GAZOIL`,
+                          fuelType: 'GAZOIL',
+                          capacity: '45000',
+                          initialStock: '10000'
                         }
                       ]);
                     }}
@@ -1411,7 +1402,7 @@ export default function StationsPage() {
                                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-bold"
                                   >
                                     <option value="ESSENCE">Essence</option>
-                                     {/* ================= STEP 3: POMPES DE DISTRIBUTION <option value="SUPER">Super</option>================= */}
+                                    <option value="SUPER">Super</option>
                                     <option value="GAZOIL">Gazoil</option>
                                   </select>
                                 </div>
@@ -1477,7 +1468,7 @@ export default function StationsPage() {
               {/* ================= STEP 4: GÉRANT & PERSONNEL ================= */}
               {wizardStep === 4 && (
                 <div className="space-y-5">
-                  
+
                   {/* Gérant de Station */}
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
                     <div className="flex items-center gap-2 text-sm font-bold text-amber-400">
@@ -1675,7 +1666,7 @@ export default function StationsPage() {
       {selectedStation && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
-            
+
             {/* Header */}
             <div className="bg-slate-950 border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1701,7 +1692,7 @@ export default function StationsPage() {
 
             {/* Content Tabs / Sections */}
             <div className="p-5 overflow-y-auto space-y-6 text-xs flex-1">
-              
+
               {/* Section 1: Cuves de cette station */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1900,7 +1891,7 @@ export default function StationsPage() {
       {stationToDelete && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-red-500/50 rounded-2xl max-w-lg w-full shadow-2xl shadow-red-950/60 overflow-hidden ring-1 ring-red-500/30 animate-in zoom-in-95 duration-150">
-            
+
             {/* Modal Header */}
             <div className="bg-slate-950 p-5 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -2012,7 +2003,7 @@ export default function StationsPage() {
       {isDeleteAllModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border-2 border-red-500/60 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl shadow-red-950/80 animate-in fade-in zoom-in-95 duration-150">
-            
+
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-red-950/80 to-slate-900 p-5 border-b border-red-900/40 flex items-center justify-between">
               <div className="flex items-center gap-3">
