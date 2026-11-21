@@ -123,6 +123,19 @@ export default function CarburantsPage() {
     e.preventDefault();
     if (!selectedPumpId) return;
 
+    const startVal = parseFloat(startIndexInput) || 0;
+    const endVal = parseFloat(endIndexInput) || 0;
+
+    // ✅ Validation bloquante : l'index d'arrivée doit être supérieur à l'index de départ
+    if (endVal <= startVal) {
+      notifyError(
+        `L'Index Arrivée (${endVal.toLocaleString('fr-FR')}) doit être SUPÉRIEUR à l'Index Départ (${startVal.toLocaleString('fr-FR')}). ` +
+        `Un compteur de pompe ne peut que monter. Vérifiez vos valeurs.`,
+        '⛽ Erreur de Saisie — Index Incohérent'
+      );
+      return;
+    }
+
     try {
       const { receipt, shift } = recordPumpShift({
         pumpId: selectedPumpId,
@@ -214,6 +227,7 @@ export default function CarburantsPage() {
   const startNum = parseFloat(startIndexInput) || 0;
   const endNum = parseFloat(endIndexInput) || 0;
   const returnNum = parseFloat(returnToTankInput) || 0;
+  const indexError = endNum > 0 && startNum > 0 && endNum < startNum;
   const soldLiters = Math.max(0, endNum - startNum - returnNum);
   const totalAmount = soldLiters * (activeNozzle?.unitPrice || activePump?.unitPrice || 12000);
 
@@ -441,7 +455,7 @@ export default function CarburantsPage() {
                     inputMode="numeric"
                     required
                     placeholder="ex: 145200"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500"
+                    className={`w-full bg-slate-950 border rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500 ${indexError ? 'border-red-500 ring-1 ring-red-500/40' : 'border-slate-800'}`}
                     value={startIndexInput}
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setStartIndexInput(e.target.value.replace(/[^0-9.]/g, ''))}
@@ -455,13 +469,28 @@ export default function CarburantsPage() {
                     inputMode="numeric"
                     required
                     placeholder="ex: 147800"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500"
+                    className={`w-full bg-slate-950 border rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-red-500 ${indexError ? 'border-red-500 ring-1 ring-red-500/40' : 'border-slate-800'}`}
                     value={endIndexInput}
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setEndIndexInput(e.target.value.replace(/[^0-9.]/g, ''))}
                   />
                 </div>
               </div>
+
+              {/* ✅ Alerte visuelle en temps réel si index incohérent */}
+              {indexError && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-red-950/60 border border-red-700/60 text-red-300 text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                  <div>
+                    <span className="font-black text-red-400 block">Index Arrivée inférieur à l'Index Départ !</span>
+                    Un compteur de pompe ne peut que monter. Vérifiez vos valeurs avant de valider.
+                    <br />
+                    <span className="font-mono text-red-200 text-[11px]">
+                      Différence : {(endNum - startNum).toLocaleString('fr-FR')} (négatif → 0 Litre vendu)
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Retour en Cuve (Essais / Purges L) :</label>
