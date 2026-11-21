@@ -87,13 +87,27 @@ export default function CarburantsPage() {
   // Synchronisation dynamique du pompiste responsable avec la liste de la station
   React.useEffect(() => {
     if (availablePompistes.length > 0) {
-      // Si le nom actuel n'est pas dans la liste des pompistes disponibles, on prend le premier
       const exists = availablePompistes.some(p => p.fullName === pompisteName);
       if (!exists) {
         setPompisteName(availablePompistes[0].fullName);
       }
     }
   }, [availablePompistes, pompisteName]);
+
+  // ✅ Synchronisation automatique des index de départ et d'arrivée
+  // Quand la pompe ou le pistolet change, on recharge les index depuis l'état courant de la pompe
+  React.useEffect(() => {
+    const pump = filteredPumps.find(p => p.id === selectedPumpId);
+    if (!pump) return;
+    if (selectedNozzle === 'P2' && pump.nozzle2) {
+      setStartIndexInput(String(pump.nozzle2.startIndex ?? pump.nozzle2.endIndex ?? 0));
+      setEndIndexInput(String(pump.nozzle2.endIndex ?? 0));
+    } else {
+      const idx = pump.nozzle1?.endIndex ?? pump.endIndex ?? 0;
+      setStartIndexInput(String(idx));
+      setEndIndexInput(String(idx));
+    }
+  }, [selectedPumpId, selectedNozzle]);
 
   // Synchronisation dynamique du N° de BL
   React.useEffect(() => {
@@ -110,7 +124,7 @@ export default function CarburantsPage() {
     if (!selectedPumpId) return;
 
     try {
-      const { receipt } = recordPumpShift({
+      const { receipt, shift } = recordPumpShift({
         pumpId: selectedPumpId,
         nozzleKey: selectedNozzle,
         startIndex: parseFloat(startIndexInput) || 0,
@@ -126,6 +140,14 @@ export default function CarburantsPage() {
           address: newTourSubAddress
         } : undefined
       });
+
+      // ✅ Après validation, l'index d'arrivée devient automatiquement le prochain index de départ
+      const newStartIndex = String(shift.endIndex);
+      setStartIndexInput(newStartIndex);
+      setEndIndexInput(newStartIndex);
+      setReturnToTankInput('0');
+      setSubscriberMode('NONE');
+
       setReceiptData(receipt);
       setReceiptModalOpen(true);
       notifySuccess(`Relevé de pompe enregistré avec succès !`);
