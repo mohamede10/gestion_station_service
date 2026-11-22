@@ -58,7 +58,8 @@ export default function Dashboard() {
   const netDueSubscribers = totalCreditBalance - totalAdvances;
 
   const totalSubscriberPayments = filteredPayments.reduce((acc, p) => acc + p.amount, 0);
-  const totalCashIn = totalFuelRevenue + totalSubscriberPayments;
+  const totalPumpCash = filteredShifts.reduce((acc, s) => acc + (s.cashAmount !== undefined ? s.cashAmount : (s.totalAmount - (s.creditedAmount || 0))), 0);
+  const totalCashIn = totalPumpCash + totalSubscriberPayments;
   const totalExpensesAmount = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
   const netCashBalance = totalCashIn - totalExpensesAmount;
 

@@ -62,8 +62,9 @@ export default function CaissePage() {
 
   // Totals Calculation
   const totalPumpRevenue = filteredShifts.reduce((acc, s) => acc + s.totalAmount, 0);
+  const totalPumpCash = filteredShifts.reduce((acc, s) => acc + (s.cashAmount !== undefined ? s.cashAmount : (s.totalAmount - (s.creditedAmount || 0))), 0);
   const totalSubscriberPayments = filteredPayments.reduce((acc, p) => acc + p.amount, 0);
-  const totalCashIn = totalPumpRevenue + totalSubscriberPayments;
+  const totalCashIn = totalPumpCash + totalSubscriberPayments;
 
   const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
   const currentCashBalance = totalCashIn - totalExpenses;
@@ -173,7 +174,7 @@ export default function CaissePage() {
           <div className="text-2xl font-black text-emerald-400 mt-2">
             +{totalCashIn.toLocaleString('fr-FR')} <span className="text-xs text-slate-400 font-bold">GNF</span>
           </div>
-          <span className="text-[11px] text-slate-500">Pompes ({(totalPumpRevenue).toLocaleString('fr-FR')}) + Abonnés</span>
+          <span className="text-[11px] text-slate-500">Espèces Pompes ({totalPumpCash.toLocaleString('fr-FR')}) + Règlements Abonnés</span>
         </div>
 
         <div className="glass-card p-4 rounded-2xl">

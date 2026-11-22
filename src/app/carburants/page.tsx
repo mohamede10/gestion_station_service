@@ -15,10 +15,25 @@ import {
   ArrowUpRight, 
   History,
   TrendingDown,
-  Radio
+  Radio,
+  Plus,
+  Trash2,
+  CreditCard,
+  Users,
+  Coins
 } from 'lucide-react';
 import ReceiptModal, { ReceiptData } from '@/components/ReceiptModal';
 import { formatFuelName, NozzleKey } from '@/lib/data-mock';
+
+export interface ShiftSubscriberItem {
+  id: string;
+  mode: 'EXISTING' | 'NEW';
+  subscriberId: string;
+  liters: string;
+  newSubName: string;
+  newSubPhone: string;
+  newSubAddress: string;
+}
 
 export default function CarburantsPage() {
   const { 
@@ -59,16 +74,36 @@ export default function CarburantsPage() {
   // Form State: Saisie Pompiste
   const [selectedPumpId, setSelectedPumpId] = useState<string>(filteredPumps[0]?.id || '');
   const [selectedNozzle, setSelectedNozzle] = useState<NozzleKey>('P1');
-  const [subscriberMode, setSubscriberMode] = useState<'NONE' | 'EXISTING' | 'NEW'>('NONE');
-  const [tourSubscriberId, setTourSubscriberId] = useState<string>(subscribers[0]?.id || '');
-  const [newTourSubName, setNewTourSubName] = useState<string>('');
-  const [newTourSubPhone, setNewTourSubPhone] = useState<string>('');
-  const [newTourSubAddress, setNewTourSubAddress] = useState<string>('Conakry');
+  const [shiftSubscribers, setShiftSubscribers] = useState<ShiftSubscriberItem[]>([]);
   const [startIndexInput, setStartIndexInput] = useState<string>(String(filteredPumps[0]?.startIndex || 0));
   const [endIndexInput, setEndIndexInput] = useState<string>(String(filteredPumps[0]?.endIndex || 0));
   const [returnToTankInput, setReturnToTankInput] = useState<string>('0');
   const [pompisteName, setPompisteName] = useState<string>('Laye Souaré');
   const [shiftType, setShiftType] = useState<'MATIN' | 'SOIR' | 'NUIT'>('MATIN');
+
+  const addSubscriberCredit = () => {
+    const defaultSub = subscribers.find(s => isGlobal || s.stationId === currentStation?.id);
+    setShiftSubscribers(prev => [
+      ...prev,
+      {
+        id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        mode: defaultSub ? 'EXISTING' : 'NEW',
+        subscriberId: defaultSub?.id || '',
+        liters: '',
+        newSubName: '',
+        newSubPhone: '',
+        newSubAddress: 'Conakry'
+      }
+    ]);
+  };
+
+  const updateSubscriberCredit = (id: string, updates: Partial<ShiftSubscriberItem>) => {
+    setShiftSubscribers(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  };
+
+  const removeSubscriberCredit = (id: string) => {
+    setShiftSubscribers(prev => prev.filter(item => item.id !== id));
+  };
 
   // Form State: Jaugeage
   const [selectedTankId, setSelectedTankId] = useState<string>(filteredTanks[0]?.id || '');
@@ -136,6 +171,33 @@ export default function CarburantsPage() {
       return;
     }
 
+    // ✅ Validation bloquante : le total des litres abonnés ne peut pas dépasser le volume net vendu
+    if (totalCreditedLiters > soldLiters) {
+      notifyError(
+        `Le total des litres alloués aux abonnés (${totalCreditedLiters.toLocaleString('fr-FR')} L) dépasse le volume net pompé (${soldLiters.toLocaleString('fr-FR')} L). Veuillez ajuster les litres.`,
+        '⚠️ Dépassement de Volume'
+      );
+      return;
+    }
+
+    // ✅ Validation des lignes abonnés
+    for (let i = 0; i < shiftSubscribers.length; i++) {
+      const item = shiftSubscribers[i];
+      const lit = parseFloat(item.liters) || 0;
+      if (lit <= 0) {
+        notifyError(`Veuillez saisir un nombre de litres valide (> 0) pour le client abonné #${i + 1}.`);
+        return;
+      }
+      if (item.mode === 'NEW' && !item.newSubName.trim()) {
+        notifyError(`Veuillez renseigner le nom pour le nouvel abonné #${i + 1}.`);
+        return;
+      }
+      if (item.mode === 'EXISTING' && !item.subscriberId) {
+        notifyError(`Veuillez sélectionner un abonné dans la liste pour le client #${i + 1}.`);
+        return;
+      }
+    }
+
     try {
       const { receipt, shift } = recordPumpShift({
         pumpId: selectedPumpId,
@@ -145,13 +207,16 @@ export default function CarburantsPage() {
         returnToTank: parseFloat(returnToTankInput) || 0,
         pompisteName,
         shiftType,
-        subscriberMode,
-        subscriberId: subscriberMode === 'EXISTING' ? tourSubscriberId : undefined,
-        newSubscriber: subscriberMode === 'NEW' ? {
-          name: newTourSubName,
-          phone: newTourSubPhone,
-          address: newTourSubAddress
-        } : undefined
+        subscriberCredits: shiftSubscribers.map(item => ({
+          mode: item.mode,
+          subscriberId: item.mode === 'EXISTING' ? item.subscriberId : undefined,
+          liters: parseFloat(item.liters) || 0,
+          newSubscriber: item.mode === 'NEW' ? {
+            name: item.newSubName.trim(),
+            phone: item.newSubPhone.trim(),
+            address: item.newSubAddress.trim()
+          } : undefined
+        }))
       });
 
       // ✅ Après validation, l'index d'arrivée devient automatiquement le prochain index de départ
@@ -159,7 +224,7 @@ export default function CarburantsPage() {
       setStartIndexInput(newStartIndex);
       setEndIndexInput(newStartIndex);
       setReturnToTankInput('0');
-      setSubscriberMode('NONE');
+      setShiftSubscribers([]);
 
       setReceiptData(receipt);
       setReceiptModalOpen(true);
@@ -229,7 +294,15 @@ export default function CarburantsPage() {
   const returnNum = parseFloat(returnToTankInput) || 0;
   const indexError = endNum > 0 && startNum > 0 && endNum < startNum;
   const soldLiters = Math.max(0, endNum - startNum - returnNum);
-  const totalAmount = soldLiters * (activeNozzle?.unitPrice || activePump?.unitPrice || 12000);
+  const unitPrice = activeNozzle?.unitPrice || activePump?.unitPrice || 12000;
+  const totalAmount = soldLiters * unitPrice;
+
+  // Calculs répartition abonnés à crédit vs espèces pompiste
+  const totalCreditedLiters = shiftSubscribers.reduce((acc, item) => acc + (parseFloat(item.liters) || 0), 0);
+  const totalCreditedAmount = totalCreditedLiters * unitPrice;
+  const cashLiters = Math.max(0, soldLiters - totalCreditedLiters);
+  const cashAmount = cashLiters * unitPrice;
+  const creditExceedsSold = totalCreditedLiters > soldLiters && soldLiters > 0;
 
   return (
     <div className="space-y-6">
@@ -505,75 +578,222 @@ export default function CarburantsPage() {
                 />
               </div>
 
-              {/* Crédit abonné pendant la tournée */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
-                <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wide">Abonné crédité (tournée)</div>
-                <select
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold outline-none focus:border-amber-500"
-                  value={subscriberMode}
-                  onChange={(e) => setSubscriberMode(e.target.value as 'NONE' | 'EXISTING' | 'NEW')}
-                >
-                  <option value="NONE">Aucun abonné</option>
-                  <option value="EXISTING">Abonné existant</option>
-                  <option value="NEW">Nouvel abonné</option>
-                </select>
-
-                {subscriberMode === 'EXISTING' && subscribers.filter(s => isGlobal || s.stationId === currentStation.id).length > 0 && (
-                  <select
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
-                    value={tourSubscriberId}
-                    onChange={(e) => setTourSubscriberId(e.target.value)}
+              {/* Bons Carburant Abonnés / Ventes à Crédit pendant la tournée */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5" /> Bons Carburant Abonnés (Crédit)
+                    </span>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Saisissez chaque client abonné avec le nombre de litres pris. Le reste du carburant sera automatiquement comptabilisé en espèces à verser par le pompiste.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addSubscriberCredit}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-bold text-[11px] flex items-center gap-1 transition shrink-0 cursor-pointer"
                   >
-                    {subscribers.filter(s => isGlobal || s.stationId === currentStation.id).map((s) => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.code}) — Crédit {s.currentCredit.toLocaleString('fr-FR')} GNF</option>
-                    ))}
-                  </select>
-                )}
+                    <Plus className="w-3 h-3" /> Ajouter Bon
+                  </button>
+                </div>
 
-                {subscriberMode === 'NEW' && (
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Nom du nouvel abonné"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
-                      value={newTourSubName}
-                      onChange={(e) => setNewTourSubName(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Téléphone"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
-                      value={newTourSubPhone}
-                      onChange={(e) => setNewTourSubPhone(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Adresse"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
-                      value={newTourSubAddress}
-                      onChange={(e) => setNewTourSubAddress(e.target.value)}
-                    />
-                    <div className="text-[10px] text-emerald-400">
-                      {soldLiters.toLocaleString('fr-FR')} L × {(activeNozzle?.unitPrice || 12000).toLocaleString('fr-FR')} GNF = {totalAmount.toLocaleString('fr-FR')} GNF crédités automatiquement
-                    </div>
+                {shiftSubscribers.length === 0 ? (
+                  <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>
+                      Aucun bon abonné ajouté. <strong className="text-white">100% de la tournée</strong> ({soldLiters.toLocaleString('fr-FR')} L) est à recouvrer au comptant / espèces.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {shiftSubscribers.map((item, idx) => {
+                      const itemLitersNum = parseFloat(item.liters) || 0;
+                      const itemAmount = itemLitersNum * unitPrice;
+                      const activeSub = subscribers.find(s => s.id === item.subscriberId);
+
+                      return (
+                        <div key={item.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5 relative">
+                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                            <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-[10px] font-mono">
+                                {idx + 1}
+                              </span>
+                              Client Abonné #{idx + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeSubscriberCredit(item.id)}
+                              className="text-slate-500 hover:text-red-400 p-1 transition cursor-pointer"
+                              title="Supprimer ce bon"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Mode abonné : existant ou nouveau */}
+                          <div className="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[10px] font-semibold">
+                            <button
+                              type="button"
+                              onClick={() => updateSubscriberCredit(item.id, { mode: 'EXISTING' })}
+                              className={`py-1 rounded text-center transition cursor-pointer ${item.mode === 'EXISTING' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              Abonné Existant
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateSubscriberCredit(item.id, { mode: 'NEW' })}
+                              className={`py-1 rounded text-center transition cursor-pointer ${item.mode === 'NEW' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              + Nouveau Client
+                            </button>
+                          </div>
+
+                          {item.mode === 'EXISTING' ? (
+                            <div>
+                              <label className="block text-[10px] text-slate-400 font-semibold mb-1">Sélectionner l'Abonné :</label>
+                              <select
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"
+                                value={item.subscriberId}
+                                onChange={(e) => updateSubscriberCredit(item.id, { subscriberId: e.target.value })}
+                              >
+                                {subscribers.filter(s => isGlobal || s.stationId === currentStation?.id).map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.code}) — Crédit actuel : {s.currentCredit.toLocaleString('fr-FR')} GNF
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div>
+                                <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Nom du Nouvel Abonné :</label>
+                                <input
+                                  type="text"
+                                  placeholder="ex: Entreprise ABC / M. Bah"
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"
+                                  value={item.newSubName}
+                                  onChange={(e) => updateSubscriberCredit(item.id, { newSubName: e.target.value })}
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Téléphone :</label>
+                                  <input
+                                    type="text"
+                                    placeholder="+224 620 00 00 00"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"
+                                    value={item.newSubPhone}
+                                    onChange={(e) => updateSubscriberCredit(item.id, { newSubPhone: e.target.value })}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Adresse / Ville :</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Conakry"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"
+                                    value={item.newSubAddress}
+                                    onChange={(e) => updateSubscriberCredit(item.id, { newSubAddress: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* CHAMP NOMBRE DE LITRES PRIS PAR CET ABONNÉ */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="text-[10px] text-slate-300 font-bold">
+                                Volume Pris par ce Client (Litres) :
+                              </label>
+                              {itemLitersNum > 0 && (
+                                <span className="text-[10px] font-mono text-amber-300 font-bold">
+                                  {itemAmount.toLocaleString('fr-FR')} GNF
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              required
+                              placeholder="ex: 150 (Litres pris sur ce bon)"
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-amber-400 font-mono font-bold outline-none focus:border-amber-500"
+                              value={item.liters}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateSubscriberCredit(item.id, { liters: e.target.value.replace(/[^0-9.]/g, '') })}
+                            />
+                            {itemLitersNum > 0 && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                {itemLitersNum.toLocaleString('fr-FR')} L × {unitPrice.toLocaleString('fr-FR')} GNF = <strong className="text-amber-400">{itemAmount.toLocaleString('fr-FR')} GNF</strong> portés au compte de {item.mode === 'EXISTING' ? (activeSub?.name || 'ce client') : (item.newSubName || 'ce client')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Dépassement alerte */}
+                    {creditExceedsSold && (
+                      <div className="p-2.5 rounded-lg bg-red-950/70 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                        <span>
+                          Le total des litres abonnés ({totalCreditedLiters.toLocaleString('fr-FR')} L) dépasse le volume net pompé ({soldLiters.toLocaleString('fr-FR')} L) !
+                        </span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={addSubscriberCredit}
+                      className="w-full py-2 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-amber-400" /> Ajouter un autre client abonné
+                    </button>
                   </div>
                 )}
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+              {/* Récapitulatif Financier Complet Tournée */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-400">
-                  <span>Volume Net Vendu :</span>
+                  <span>Volume Net Pompé :</span>
                   <span className="font-bold text-white font-mono">{soldLiters.toLocaleString('fr-FR')} Litres</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Prix Unitaire Réglementé :</span>
-                  <span className="font-mono text-slate-300">{(activeNozzle?.unitPrice || activePump?.unitPrice || 12000).toLocaleString('fr-FR')} GNF / L</span>
+                  <span className="font-mono text-slate-300">{unitPrice.toLocaleString('fr-FR')} GNF / L</span>
                 </div>
-                <div className="flex justify-between pt-1.5 border-t border-slate-800 text-sm font-black">
-                  <span className="text-slate-300">Recette Totale à Recouvrer :</span>
-                  <span className="text-red-400">{totalAmount.toLocaleString('fr-FR')} GNF</span>
+                <div className="flex justify-between text-slate-400">
+                  <span>Valeur Totale du Carburant :</span>
+                  <span className="font-mono font-bold text-slate-200">{totalAmount.toLocaleString('fr-FR')} GNF</span>
                 </div>
+
+                {totalCreditedLiters > 0 && (
+                  <>
+                    <div className="flex justify-between text-amber-400 pt-1.5 border-t border-slate-800/80">
+                      <span>Bons Crédits Abonnés ({shiftSubscribers.length}) :</span>
+                      <span className="font-mono font-bold">
+                        -{totalCreditedAmount.toLocaleString('fr-FR')} GNF ({totalCreditedLiters.toLocaleString('fr-FR')} L)
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-slate-800 text-sm font-black">
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <Coins className="w-4 h-4" /> Recette Espèces Pompiste (Cash) :
+                      </span>
+                      <span className="text-emerald-400 font-mono">
+                        {cashAmount.toLocaleString('fr-FR')} GNF ({cashLiters.toLocaleString('fr-FR')} L)
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {totalCreditedLiters === 0 && (
+                  <div className="flex justify-between pt-1.5 border-t border-slate-800 text-sm font-black">
+                    <span className="text-slate-300">Recette Totale à Recouvrer (100% Espèces) :</span>
+                    <span className="text-red-400">{totalAmount.toLocaleString('fr-FR')} GNF</span>
+                  </div>
+                )}
               </div>
 
               <button
@@ -1017,11 +1237,26 @@ export default function CarburantsPage() {
                   <div className="text-slate-400 mt-1">
                     Pompiste : <strong className="text-slate-200">{sh.pompisteName}</strong> | Index : {sh.startIndex.toLocaleString('fr-FR')} → {sh.endIndex.toLocaleString('fr-FR')} | Retour : {sh.returnToTank} L
                   </div>
+                  {sh.subscriberCredits && sh.subscriberCredits.length > 0 && (
+                    <div className="text-[11px] text-amber-400 mt-1.5 flex flex-wrap gap-1.5 items-center">
+                      <span className="font-semibold text-amber-300">Bons abonnés :</span>
+                      {sh.subscriberCredits.map((c, idx) => (
+                        <span key={idx} className="bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded text-[10px] text-amber-200">
+                          {c.subscriberName} : {c.liters.toLocaleString('fr-FR')} L ({c.amount.toLocaleString('fr-FR')} GNF)
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0">
                   <div className="font-bold text-white">{sh.litersSold.toLocaleString('fr-FR')} Litres</div>
                   <div className="font-black text-red-400">{sh.totalAmount.toLocaleString('fr-FR')} GNF</div>
+                  {sh.cashAmount !== undefined && (
+                    <div className="text-[10px] text-emerald-400 font-mono mt-0.5">
+                      Espèces : {sh.cashAmount.toLocaleString('fr-FR')} GNF
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

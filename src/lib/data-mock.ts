@@ -214,6 +214,14 @@ export interface FuelDeliveryMock {
   timestamp: string;
 }
 
+export interface ShiftSubscriberCredit {
+  subscriberId?: string;
+  subscriberName: string;
+  liters: number;
+  unitPrice: number;
+  amount: number;
+}
+
 export interface FuelPumpShiftMock {
   id: string;
   stationId: string;
@@ -229,12 +237,16 @@ export interface FuelPumpShiftMock {
   pompisteName: string;
   shiftType: 'MATIN' | 'SOIR' | 'NUIT';
   timestamp: string;
-  // Pistolet utilisé et abonné crédité pendant la tournée (si applicable).
+  // Pistolet utilisé et abonnés crédités pendant la tournée (si applicable).
   nozzleKey?: NozzleKey;
   nozzleLabel?: string;
   subscriberId?: string;
   subscriberName?: string;
   creditedAmount?: number;
+  creditedLiters?: number;
+  cashLiters?: number;
+  cashAmount?: number;
+  subscriberCredits?: ShiftSubscriberCredit[];
 }
 
 export interface CertifiedDocumentMock {

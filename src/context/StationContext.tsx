@@ -12,6 +12,7 @@ import {
   EmployeeMock, 
   FuelDeliveryMock, 
   FuelPumpShiftMock, 
+  ShiftSubscriberCredit,
   GeneratedInvoiceMock,
   InvoiceCategory,
   INITIAL_STATIONS, 
@@ -169,10 +170,17 @@ interface StationContextType {
     returnToTank: number;
     pompisteName: string;
     shiftType: 'MATIN' | 'SOIR' | 'NUIT';
-    // Crédit abonné pendant la tournée.
-    subscriberMode: 'NONE' | 'EXISTING' | 'NEW';
+    // Crédit abonné pendant la tournée (supporte plusieurs abonnés et litres spécifiques).
+    subscriberMode?: 'NONE' | 'EXISTING' | 'NEW';
     subscriberId?: string;
+    subscriberLiters?: number;
     newSubscriber?: { name: string; phone: string; address: string; initialAdvance?: number };
+    subscriberCredits?: Array<{
+      mode: 'EXISTING' | 'NEW';
+      subscriberId?: string;
+      liters: number;
+      newSubscriber?: { name: string; phone?: string; address?: string; initialAdvance?: number };
+    }>;
   }) => { receipt: ReceiptData; shift: FuelPumpShiftMock };
 
   recordTankDipstick: (data: {
@@ -1301,9 +1309,16 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     returnToTank: number;
     pompisteName: string;
     shiftType: 'MATIN' | 'SOIR' | 'NUIT';
-    subscriberMode: 'NONE' | 'EXISTING' | 'NEW';
+    subscriberMode?: 'NONE' | 'EXISTING' | 'NEW';
     subscriberId?: string;
+    subscriberLiters?: number;
     newSubscriber?: { name: string; phone: string; address: string; initialAdvance?: number };
+    subscriberCredits?: Array<{
+      mode: 'EXISTING' | 'NEW';
+      subscriberId?: string;
+      liters: number;
+      newSubscriber?: { name: string; phone?: string; address?: string; initialAdvance?: number };
+    }>;
   }) => {
     const pump = pumps.find(p => p.id === data.pumpId);
     if (!pump) throw new Error('Pompe non trouvée');
@@ -1365,30 +1380,67 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       }));
     }
 
-    // Identification ou création d'un abonné pendant la tournée : le montant
-    // de la vente est immédiatement porté à son crédit.
-    let creditedSubscriber: SubscriberMock | undefined;
-    if (data.subscriberMode === 'EXISTING' && data.subscriberId) {
-      creditedSubscriber = subscribers.find((s) => s.id === data.subscriberId);
-    } else if (data.subscriberMode === 'NEW' && data.newSubscriber?.name?.trim()) {
-      creditedSubscriber = addSubscriber({
-        code: generateSubscriberCode(),
-        name: data.newSubscriber.name.trim(),
-        phone: data.newSubscriber.phone || '',
-        address: data.newSubscriber.address || '',
-        stationId: pump.stationId,
-        initialAdvance: Number(data.newSubscriber.initialAdvance) || 0,
-        initialCredit: 0
-      });
+    // Identification ou création d'abonnés pendant la tournée : chaque montant
+    // est calculé spécifiquement d'après les litres pris par chaque client.
+    const recordedCredits: ShiftSubscriberCredit[] = [];
+    let totalCreditedLiters = 0;
+    let totalCreditedAmount = 0;
+
+    // Normalisation des crédits abonnés (soit liste multiple, soit entrée unique rétro-compatible)
+    const creditsToProcess = (data.subscriberCredits && data.subscriberCredits.length > 0)
+      ? data.subscriberCredits
+      : (data.subscriberMode && data.subscriberMode !== 'NONE')
+        ? [{
+            mode: data.subscriberMode,
+            subscriberId: data.subscriberId,
+            liters: (data.subscriberLiters && data.subscriberLiters > 0) ? data.subscriberLiters : litersSold,
+            newSubscriber: data.newSubscriber
+          }]
+        : [];
+
+    for (const item of creditsToProcess) {
+      const itemLiters = Math.max(0, Number(item.liters) || 0);
+      if (itemLiters <= 0) continue;
+
+      let sub: SubscriberMock | undefined;
+      if (item.mode === 'EXISTING' && item.subscriberId) {
+        sub = subscribers.find((s) => s.id === item.subscriberId);
+      } else if (item.mode === 'NEW' && item.newSubscriber?.name?.trim()) {
+        sub = addSubscriber({
+          code: generateSubscriberCode(),
+          name: item.newSubscriber.name.trim(),
+          phone: item.newSubscriber.phone || '',
+          address: item.newSubscriber.address || '',
+          stationId: pump.stationId,
+          initialAdvance: Number(item.newSubscriber.initialAdvance) || 0,
+          initialCredit: 0
+        });
+      }
+
+      if (sub) {
+        const itemAmount = itemLiters * nozzle.unitPrice;
+        totalCreditedLiters += itemLiters;
+        totalCreditedAmount += itemAmount;
+        const targetSubId = sub.id;
+
+        setSubscribers(prev => prev.map((s) => s.id === targetSubId
+          ? { ...s, currentCredit: s.currentCredit + itemAmount }
+          : s));
+
+        recordedCredits.push({
+          subscriberId: sub.id,
+          subscriberName: sub.name,
+          liters: itemLiters,
+          unitPrice: nozzle.unitPrice,
+          amount: itemAmount
+        });
+      }
     }
 
-    if (creditedSubscriber) {
-      const creditedId = creditedSubscriber.id;
-      setSubscribers(prev => prev.map((s) => s.id === creditedId
-        ? { ...s, currentCredit: s.currentCredit + totalAmount }
-        : s));
-    }
+    const cashLiters = Math.max(0, litersSold - totalCreditedLiters);
+    const cashAmount = cashLiters * nozzle.unitPrice;
 
+    const firstCredit = recordedCredits[0];
     const shift: FuelPumpShiftMock = {
       id: `shift-${Date.now()}`,
       stationId: pump.stationId,
@@ -1406,9 +1458,15 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
       nozzleKey: data.nozzleKey,
       nozzleLabel,
-      subscriberId: creditedSubscriber?.id,
-      subscriberName: creditedSubscriber?.name,
-      creditedAmount: creditedSubscriber ? totalAmount : 0
+      subscriberId: firstCredit?.subscriberId,
+      subscriberName: recordedCredits.length > 1
+        ? `${recordedCredits.length} abonnés (${totalCreditedLiters.toLocaleString('fr-FR')} L)`
+        : firstCredit?.subscriberName,
+      creditedAmount: totalCreditedAmount,
+      creditedLiters: totalCreditedLiters,
+      cashLiters,
+      cashAmount,
+      subscriberCredits: recordedCredits
     };
 
     setPumpShifts(prev => [shift, ...prev]);
@@ -1428,16 +1486,24 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
         { label: 'Index Départ', value: data.startIndex.toLocaleString('fr-FR') },
         { label: 'Index Arrivée', value: data.endIndex.toLocaleString('fr-FR') },
         { label: 'Retour en Cuve', value: `${data.returnToTank.toLocaleString('fr-FR')} Litres` },
-        { label: 'Quantité Nette Vendue', value: `${litersSold.toLocaleString('fr-FR')} Litres` },
+        { label: 'Quantité Totale Vendue', value: `${litersSold.toLocaleString('fr-FR')} Litres` },
         { label: 'Prix Unitaire', value: `${nozzle.unitPrice.toLocaleString('fr-FR')} GNF / L` },
-        { label: 'RECETTE TOTALE THÉORIQUE', value: `${totalAmount.toLocaleString('fr-FR')} GNF` },
-        ...(creditedSubscriber ? [
-          { label: 'Abonné Crédité', value: `${creditedSubscriber.name} (${creditedSubscriber.code})` },
-          { label: 'Montant Porté au Crédit', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
-        ] : [])
+        { label: 'VALEUR TOTALE DU CARBURANT', value: `${totalAmount.toLocaleString('fr-FR')} GNF` },
+        ...(recordedCredits.map((c, i) => ({
+          label: `Bon Abonné #${i + 1} (${c.subscriberName})`,
+          value: `${c.liters.toLocaleString('fr-FR')} L × ${nozzle.unitPrice.toLocaleString('fr-FR')} GNF = ${c.amount.toLocaleString('fr-FR')} GNF (Crédit)`
+        }))),
+        ...(recordedCredits.length > 0 ? [
+          { label: 'TOTAL CRÉDITS ABONNÉS', value: `${totalCreditedAmount.toLocaleString('fr-FR')} GNF (${totalCreditedLiters.toLocaleString('fr-FR')} L)` },
+          { label: 'RECETTE ESPÈCES À VERSER (CASH)', value: `${cashAmount.toLocaleString('fr-FR')} GNF (${cashLiters.toLocaleString('fr-FR')} L)` }
+        ] : [
+          { label: 'RECETTE COMPTANT (ESPÈCES)', value: `${totalAmount.toLocaleString('fr-FR')} GNF` }
+        ])
       ],
       notes: sourceTank
-        ? (creditedSubscriber ? 'Tournée enregistrée et montant porté au compte abonné. Sortie de cuve déduite en temps réel.' : 'Saisie enregistrée avec succès. Sortie de cuve déduite en temps réel.')
+        ? (recordedCredits.length > 0
+            ? `Tournée validée avec ${recordedCredits.length} bon(s) abonné(s) pour ${totalCreditedLiters.toLocaleString('fr-FR')} L (${totalCreditedAmount.toLocaleString('fr-FR')} GNF) portés au crédit. Espèces nettes à recouvrer : ${cashAmount.toLocaleString('fr-FR')} GNF.`
+            : 'Saisie enregistrée avec succès (100% Espèces). Sortie de cuve déduite en temps réel.')
         : 'Tournée enregistrée, mais aucune cuve de ce groupe n\'est disponible : ouvrir une vanne pour débiter le stock.'
     };
 
