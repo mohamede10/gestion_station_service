@@ -486,9 +486,9 @@ export default function CarburantsPage() {
                     value={shiftType}
                     onChange={(e) => setShiftType(e.target.value as any)}
                   >
-                    <option value="MATIN">Matin (06h - 14h)</option>
-                    <option value="SOIR">Soir (14h - 22h)</option>
-                    <option value="NUIT">Nuit (22h - 06h)</option>
+                    <option value="MATIN">Matin (06h - 18h)</option>
+                    <option value="SOIR">Soir (18h - 06h)</option>
+                    <option value="NUIT">Nuit (06h - 22h)</option>
                   </select>
                 </div>
 

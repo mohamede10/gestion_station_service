@@ -82,10 +82,10 @@ export default function Navbar() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-extrabold text-base md:text-lg tracking-tight text-white flex items-center gap-1.5">
-                TotalEnergies <span className="text-red-500 font-semibold">Station</span>
+                Gestion <span className="text-red-500 font-semibold">Station Service</span>
               </h1>
               <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 border border-red-800/50">
-                <Sparkles className="w-3 h-3 text-red-400" />Multi-Stations
+                <Sparkles className="w-3 h-3 text-yellow-400" />Multi-Stations
               </span>
             </div>
             <p className="text-xs text-slate-400 flex items-center gap-1">
